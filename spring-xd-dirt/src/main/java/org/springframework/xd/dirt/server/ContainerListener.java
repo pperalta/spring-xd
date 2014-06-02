@@ -447,15 +447,15 @@ public class ContainerListener implements PathChildrenCacheListener {
 		// the passed in deploymentProperties were loaded from the
 		// deployment path...merge with deployment properties
 		// created at the stream level
-		ModuleDeploymentProperties propertiesFromStream =
+		ModuleDeploymentProperties mergedProperties =
 				DeploymentPropertiesUtility.createModuleDeploymentProperties(
 						stream.getDeploymentProperties(), moduleDescriptor);
-		propertiesFromStream.putAll(deploymentProperties);
+		mergedProperties.putAll(deploymentProperties);
 
-		if (propertiesFromStream.getCount() > 0) {
+		if (mergedProperties.getCount() > 0) {
 			try {
 				ModuleDeploymentWriter.Result result = moduleDeploymentWriter.writeDeployment(
-						moduleDescriptor, propertiesFromStream,
+						moduleDescriptor, mergedProperties,
 						instantiateContainerMatcher(client, moduleDescriptor));
 				moduleDeploymentWriter.validateResult(result);
 			}
@@ -466,7 +466,7 @@ public class ContainerListener implements PathChildrenCacheListener {
 			}
 		}
 		else {
-			logUnwantedRedeployment(propertiesFromStream.getCriteria(), moduleDescriptor.getModuleLabel());
+			logUnwantedRedeployment(mergedProperties.getCriteria(), moduleDescriptor.getModuleLabel());
 		}
 	}
 
@@ -490,15 +490,15 @@ public class ContainerListener implements PathChildrenCacheListener {
 		// the passed in deploymentProperties were loaded from the
 		// deployment path...merge with deployment properties
 		// created at the job level
-		ModuleDeploymentProperties propertiesFromJob =
+		ModuleDeploymentProperties mergedProperties =
 				DeploymentPropertiesUtility.createModuleDeploymentProperties(
 						job.getDeploymentProperties(), moduleDescriptor);
-		propertiesFromJob.putAll(deploymentProperties);
+		mergedProperties.putAll(deploymentProperties);
 
 		if (deploymentProperties.getCount() > 0) {
 			try {
 				ModuleDeploymentWriter.Result result = moduleDeploymentWriter.writeDeployment(
-						moduleDescriptor, propertiesFromJob,
+						moduleDescriptor, mergedProperties,
 						instantiateContainerMatcher(client, moduleDescriptor));
 				moduleDeploymentWriter.validateResult(result);
 			}
@@ -509,7 +509,7 @@ public class ContainerListener implements PathChildrenCacheListener {
 			}
 		}
 		else {
-			logUnwantedRedeployment(propertiesFromJob.getCriteria(), moduleDescriptor.getModuleLabel());
+			logUnwantedRedeployment(mergedProperties.getCriteria(), moduleDescriptor.getModuleLabel());
 		}
 	}
 
