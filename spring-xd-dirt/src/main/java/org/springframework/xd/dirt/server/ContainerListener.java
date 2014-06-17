@@ -400,9 +400,9 @@ public class ContainerListener implements PathChildrenCacheListener {
 		String containerDeployments = Paths.build(Paths.MODULE_DEPLOYMENTS, container);
 		List<String> deployments = client.getChildren().forPath(containerDeployments);
 
-		// We want to re-deploy modules in the correct order, per stream.
-		// This is done in a two-pass operation: gather, then re-deploy
-		Set<ToBeRedeployedModule> toBeRedeployedModules = new TreeSet<ToBeRedeployedModule>();
+		// Stream modules need to be deployed in the correct order;
+		// this is done in a two-pass operation: gather, then re-deploy.
+		Set<ModuleDeployment> streamModuleDeployments = new TreeSet<ModuleDeployment>();
 		for (String deployment : deployments) {
 			ModuleDeploymentsPath moduleDeploymentsPath =
 					new ModuleDeploymentsPath(Paths.build(containerDeployments, deployment));
@@ -431,16 +431,15 @@ public class ContainerListener implements PathChildrenCacheListener {
 					streamMap.put(unitName, stream);
 				}
 				if (stream != null) {
-					toBeRedeployedModules.add(new ToBeRedeployedModule(stream, moduleDeploymentsPath,
+					streamModuleDeployments.add(new ModuleDeployment(stream,
+							stream.getModuleDescriptor(moduleDeploymentsPath.getModuleType(), moduleType),
 							deploymentProperties));
 				}
 			}
 		}
 
-		for (ToBeRedeployedModule m : toBeRedeployedModules) {
-			String moduleType = m.moduleDeploymentsPath.getModuleType();
-			String moduleLabel = m.moduleDeploymentsPath.getModuleLabel();
-			redeployStreamModule(client, m.stream, moduleType, moduleLabel, m.deploymentProperties);
+		for (ModuleDeployment moduleDeployment : streamModuleDeployments) {
+			redeployStreamModule(client, moduleDeployment);
 		}
 
 		// remove the deployments from the departed container
@@ -457,15 +456,15 @@ public class ContainerListener implements PathChildrenCacheListener {
 	 * 		<li>there is a container that can deploy the stream module</li>
 	 * </ul>
 	 *
-	 * @param stream                stream for module
-	 * @param moduleType            module type
-	 * @param moduleLabel           module label
-	 * @param deploymentProperties  deployment properties for stream module
+	 * @param moduleDeployment contains module redeployment details such as
+	 *                         stream, module descriptor, and deployment properties
 	 * @throws InterruptedException
 	 */
-	private void redeployStreamModule(CuratorFramework client, final Stream stream, String moduleType,
-			String moduleLabel, ModuleDeploymentProperties deploymentProperties) throws Exception {
-		ModuleDescriptor moduleDescriptor = stream.getModuleDescriptor(moduleLabel, moduleType);
+	private void redeployStreamModule(CuratorFramework client, ModuleDeployment moduleDeployment)
+			throws Exception {
+		Stream stream = moduleDeployment.stream;
+		ModuleDescriptor moduleDescriptor = moduleDeployment.moduleDescriptor;
+		ModuleDeploymentProperties deploymentProperties = moduleDeployment.deploymentProperties;
 
 		// the passed in deploymentProperties were loaded from the
 		// deployment path...merge with deployment properties
@@ -588,43 +587,37 @@ public class ContainerListener implements PathChildrenCacheListener {
 		}
 	}
 
+
 	/**
-	 * Holds information about a module that needs to be re-deployed. Natural order is per-stream, 
-	 * with consumers (bigger index) coming first.
+	 * Holds information about a module that needs to be re-deployed. Natural order
+	 * is per-stream, with consumers (bigger index) coming first.
 	 *
 	 * @author Eric Bottard
 	 */
-	private static class ToBeRedeployedModule implements Comparable<ToBeRedeployedModule> {
+	private static class ModuleDeployment implements Comparable<ModuleDeployment> {
 
-		private Stream stream;
+		private final Stream stream;
 
-		private ModuleDeploymentsPath moduleDeploymentsPath;
+		private final ModuleDescriptor moduleDescriptor;
 
-		private ModuleDeploymentProperties deploymentProperties;
+		private final ModuleDeploymentProperties deploymentProperties;
 
-		private ToBeRedeployedModule(Stream stream, ModuleDeploymentsPath moduleDeploymentsPath,
+		private ModuleDeployment(Stream stream, ModuleDescriptor moduleDescriptor,
 				ModuleDeploymentProperties deploymentProperties) {
 			this.stream = stream;
-			this.moduleDeploymentsPath = moduleDeploymentsPath;
+			this.moduleDescriptor = moduleDescriptor;
 			this.deploymentProperties = deploymentProperties;
 		}
 
 		@Override
-		public int compareTo(ToBeRedeployedModule o) {
-			int streamCompare = this.stream.getName().compareTo(o.stream.getName());
-			if (streamCompare != 0) {
-				return streamCompare;
+		public int compareTo(ModuleDeployment o) {
+			int c = this.stream.getName().compareTo(o.stream.getName());
+			if (c == 0) {
+				c = o.moduleDescriptor.getIndex() - this.moduleDescriptor.getIndex();
 			}
-			else {
-				int thisIndex = stream.getModuleDescriptor(moduleDeploymentsPath.getModuleLabel(),
-						moduleDeploymentsPath.getModuleType()).getIndex();
-				int thatIndex = o.stream.getModuleDescriptor(o.moduleDeploymentsPath.getModuleLabel(),
-						o.moduleDeploymentsPath.getModuleType()).getIndex();
-				return thatIndex - thisIndex;
-			}
+			return c;
 		}
 
 	}
-
 
 }
