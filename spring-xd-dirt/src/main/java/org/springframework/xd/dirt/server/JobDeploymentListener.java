@@ -16,8 +16,9 @@
 
 package org.springframework.xd.dirt.server;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 
@@ -32,12 +33,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.util.Assert;
+import org.springframework.xd.dirt.cluster.Container;
 import org.springframework.xd.dirt.cluster.ContainerMatcher;
 import org.springframework.xd.dirt.cluster.NoContainerException;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.Job;
 import org.springframework.xd.dirt.core.JobDeploymentsPath;
+import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
 import org.springframework.xd.dirt.zookeeper.ChildPathIterator;
@@ -64,9 +67,24 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 	private static final Logger logger = LoggerFactory.getLogger(JobDeploymentListener.class);
 
 	/**
+	 * Container matcher for matching modules to containers.
+	 */
+	private final ContainerMatcher containerMatcher;
+
+	/**
+	 * Repository from which to obtain containers in the cluster.
+	 */
+	private final ContainerRepository containerRepository;
+
+	/**
 	 * Utility for writing module deployment requests to ZooKeeper.
 	 */
 	private final ModuleDeploymentWriter moduleDeploymentWriter;
+
+	/**
+	 * Cache of children under the module deployment requests path.
+	 */
+	protected final PathChildrenCache moduleDeploymentRequests;
 
 	/**
 	 * Utility for loading jobs (including deployment metadata).
@@ -88,8 +106,7 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 	 * {@link org.apache.curator.framework.recipes.cache.ChildData} in
 	 * job deployments to job name.
 	 */
-	private final ContainerListener.DeploymentNameConverter deploymentNameConverter
-			= new ContainerListener.DeploymentNameConverter();
+	private final ModuleRedeployer.DeploymentNameConverter deploymentNameConverter = new ModuleRedeployer.DeploymentNameConverter();
 
 	/**
 	 * Construct a JobDeploymentListener.
@@ -100,9 +117,12 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 	 * @param containerMatcher matches modules to containers
 	 * @param stateCalculator calculator for job state
 	 */
-	public JobDeploymentListener(ZooKeeperConnection zkConnection,
+	public JobDeploymentListener(ZooKeeperConnection zkConnection, PathChildrenCache moduleDeploymentRequests,
 			ContainerRepository containerRepository, JobFactory jobFactory,
 			ContainerMatcher containerMatcher, DeploymentUnitStateCalculator stateCalculator) {
+		this.moduleDeploymentRequests = moduleDeploymentRequests;
+		this.containerMatcher = containerMatcher;
+		this.containerRepository = containerRepository;
 		this.moduleDeploymentWriter = new ModuleDeploymentWriter(zkConnection,
 				containerRepository, containerMatcher);
 		this.jobFactory = jobFactory;
@@ -121,6 +141,8 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 			case CHILD_ADDED:
 				onChildAdded(client, event.getData());
 				break;
+			case CHILD_REMOVED:
+				onChildRemoved(client, event.getData());
 			default:
 				break;
 		}
@@ -136,6 +158,17 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 		String jobName = Paths.stripPath(data.getPath());
 		Job job = deploymentLoader.loadJob(client, jobName, jobFactory);
 		deployJob(client, job);
+	}
+
+	private void onChildRemoved(CuratorFramework client, ChildData data) throws Exception {
+		String jobName = Paths.stripPath(data.getPath());
+		RequestedModulesPath path;
+		for (ChildData requestedModulesData : moduleDeploymentRequests.getCurrentData()) {
+			path = new RequestedModulesPath(requestedModulesData.getPath());
+			if (path.getStreamName().equals(jobName)) {
+				client.delete().deletingChildrenIfNeeded().forPath(path.build());
+			}
+		}
 	}
 
 	/**
@@ -162,7 +195,7 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 				// an exception indicates that the status has not been set
 			}
 			Assert.state(deployingStatus != null
-							&& deployingStatus.getState() == DeploymentUnitStatus.State.deploying,
+					&& deployingStatus.getState() == DeploymentUnitStatus.State.deploying,
 					String.format("Expected 'deploying' status for job '%s'; current status: %s",
 							job.getName(), deployingStatus));
 
@@ -171,14 +204,43 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 			descriptors.add(job.getJobModuleDescriptor());
 
 			try {
-				Collection<ModuleDeploymentStatus> deploymentStatus =
-						moduleDeploymentWriter.writeDeployment(descriptors.iterator(), provider);
+				List<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
+				for (ModuleDescriptor descriptor : job.getModuleDescriptors()) {
+					ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
+					Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
+							deploymentProperties,
+							containerRepository.findAll()));
+					// Modules count == 0
+					if (deploymentProperties.getCount() == 0) {
+						String moduleSequence = String.valueOf(0);
+						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+						if (matchedContainers.size() > 0) {
+							deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor,
+									moduleSequence,
+									deploymentProperties,
+									matchedContainers.pop()));
+						}
+					}
+					// Modules count > 0
+					else {
+						for (int i = 1; i <= deploymentProperties.getCount(); i++) {
+							String moduleSequence = String.valueOf(i);
+							createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+							if (matchedContainers.size() > 0) {
+								deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor,
+										moduleSequence,
+										deploymentProperties,
+										matchedContainers.pop()));
+							}
+						}
+					}
 
-				DeploymentUnitStatus status = stateCalculator.calculate(job, provider, deploymentStatus);
+					DeploymentUnitStatus status = stateCalculator.calculate(job, provider, deploymentStatuses);
 
-				logger.info("Deployment status for job '{}': {}", job.getName(), status);
+					logger.info("Deployment status for job '{}': {}", job.getName(), status);
 
-				client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
+					client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
+				}
 			}
 			catch (NoContainerException e) {
 				logger.warn("No containers available for deployment of job {}", job.getName());
@@ -192,6 +254,21 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 		}
 	}
 
+	private void createRequestedModulesPath(CuratorFramework client, ModuleDescriptor descriptor,
+			ModuleDeploymentProperties deploymentProperties, String moduleSequence) {
+		// Create and set the data for the requested modules path
+		String requestedModulesPath = new RequestedModulesPath().setStreamName(
+				descriptor.getGroup()).setModuleType(descriptor.getType().toString()).setModuleLabel(
+				descriptor.getModuleLabel()).setModuleSequence(moduleSequence).build();
+		try {
+			client.create().creatingParentsIfNeeded().forPath(requestedModulesPath,
+					ZooKeeperUtils.mapToBytes(deploymentProperties));
+		}
+		catch (Exception e) {
+			ZooKeeperUtils.wrapThrowable(e);
+		}
+	}
+
 	/**
 	 * Iterate all deployed jobs, recalculate the deployment status of each, and
 	 * create an ephemeral node indicating the job state. This is typically invoked
@@ -202,8 +279,7 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 	 * @throws Exception
 	 */
 	public void recalculateJobStates(CuratorFramework client, PathChildrenCache jobDeployments) throws Exception {
-		for (Iterator<String> iterator = new ChildPathIterator<String>(deploymentNameConverter, jobDeployments);
-				iterator.hasNext();) {
+		for (Iterator<String> iterator = new ChildPathIterator<String>(deploymentNameConverter, jobDeployments); iterator.hasNext();) {
 			String jobName = iterator.next();
 			Job job = deploymentLoader.loadJob(client, jobName, jobFactory);
 			if (job != null) {
@@ -215,6 +291,7 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 							Paths.build(jobModulesPath, moduleDeployment));
 					statusList.add(new ModuleDeploymentStatus(
 							jobDeploymentsPath.getContainer(),
+							jobDeploymentsPath.getModuleSequence(),
 							new ModuleDescriptor.Key(jobName, ModuleType.job, jobDeploymentsPath.getModuleLabel()),
 							ModuleDeploymentStatus.State.deployed, null));
 				}

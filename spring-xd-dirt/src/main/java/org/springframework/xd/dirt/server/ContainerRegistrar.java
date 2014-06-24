@@ -433,6 +433,7 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 		String unitName = moduleDeploymentsPath.getStreamName();
 		String moduleType = moduleDeploymentsPath.getModuleType();
 		String moduleLabel = moduleDeploymentsPath.getModuleLabel();
+		String moduleSequence = moduleDeploymentsPath.getModuleSequence();
 		ModuleDescriptor.Key key = new ModuleDescriptor.Key(unitName, ModuleType.valueOf(moduleType), moduleLabel);
 		String container = moduleDeploymentsPath.getContainer();
 		Module module = null;
@@ -444,18 +445,18 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 		try {
 			module = (ModuleType.job.toString().equals(moduleType))
 					? deployJob(client, unitName, moduleLabel, properties)
-					: deployStreamModule(client, unitName, moduleType, moduleLabel, properties);
+					: deployStreamModule(client, unitName, moduleType, moduleLabel, moduleSequence, properties);
 			if (module == null) {
-				status = new ModuleDeploymentStatus(container, key,
+				status = new ModuleDeploymentStatus(container, moduleSequence, key,
 						ModuleDeploymentStatus.State.failed, "Module deployment returned null");
 			}
 			else {
-				status = new ModuleDeploymentStatus(container, key,
+				status = new ModuleDeploymentStatus(container, moduleSequence, key,
 						ModuleDeploymentStatus.State.deployed, null);
 			}
 		}
 		catch (Exception e) {
-			status = new ModuleDeploymentStatus(container, key,
+			status = new ModuleDeploymentStatus(container, moduleSequence, key,
 					ModuleDeploymentStatus.State.failed, e.toString());
 			logger.error("Exception deploying module", e);
 		}
@@ -535,21 +536,24 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 	/**
 	 * Deploy the requested module for a stream.
 	 *
-	 * @param client      curator client
-	 * @param streamName  name of the stream for the module
-	 * @param moduleType  module type
-	 * @param moduleLabel module label
-	 * @param properties  module deployment properties
+	 * @param client         curator client
+	 * @param streamName     name of the stream for the module
+	 * @param moduleType     module type
+	 * @param moduleLabel    module label
+	 * @param moduleSequence module sequence
+	 * @param properties     module deployment properties
 	 * @return Module deployed stream module
 	 */
 	private Module deployStreamModule(CuratorFramework client, String streamName,
-			String moduleType, String moduleLabel, ModuleDeploymentProperties properties) throws Exception {
+			String moduleType, String moduleLabel, String moduleSequence, ModuleDeploymentProperties properties)
+			throws Exception {
 		logger.info("Deploying module '{}' for stream '{}'", moduleLabel, streamName);
 
 		String streamDeploymentPath = new StreamDeploymentsPath().setStreamName(streamName)
 				.setModuleType(moduleType)
 				.setModuleLabel(moduleLabel)
-				.setContainer(containerAttributes.getId()).build();
+				.setModuleSequence(moduleSequence)
+				.setContainer(this.containerAttributes.getId()).build();
 
 		Module module = null;
 		Stream stream = deploymentLoader.loadStream(client, streamName, streamFactory);
@@ -584,6 +588,7 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 		String streamName = moduleDeploymentsPath.getStreamName();
 		String moduleType = moduleDeploymentsPath.getModuleType();
 		String moduleLabel = moduleDeploymentsPath.getModuleLabel();
+		String moduleSequence = moduleDeploymentsPath.getModuleSequence();
 
 		undeployModule(streamName, moduleType, moduleLabel);
 
@@ -597,7 +602,8 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 			path = new StreamDeploymentsPath().setStreamName(streamName)
 					.setModuleType(moduleType)
 					.setModuleLabel(moduleLabel)
-					.setContainer(containerAttributes.getId()).build();
+					.setModuleSequence(moduleSequence)
+					.setContainer(this.containerAttributes.getId()).build();
 		}
 		if (client.checkExists().forPath(path) != null) {
 			logger.trace("Deleting path: {}", path);
@@ -689,6 +695,8 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 				String streamName = streamDeploymentsPath.getStreamName();
 				String moduleType = streamDeploymentsPath.getModuleType();
 				String moduleLabel = streamDeploymentsPath.getModuleLabel();
+				String moduleSequence = streamDeploymentsPath.getModuleSequence();
+				String container = streamDeploymentsPath.getContainer();
 
 				undeployModule(streamName, moduleType, moduleLabel);
 
@@ -696,7 +704,8 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 						.setContainer(containerAttributes.getId())
 						.setStreamName(streamName)
 						.setModuleType(moduleType)
-						.setModuleLabel(moduleLabel).build();
+						.setModuleLabel(moduleLabel)
+						.setModuleSequence(moduleSequence).build();
 
 				CuratorFramework client = zkConnection.getClient();
 				try {
@@ -743,6 +752,7 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 				JobDeploymentsPath jobDeploymentsPath = new JobDeploymentsPath(event.getPath());
 				String jobName = jobDeploymentsPath.getJobName();
 				String moduleLabel = jobDeploymentsPath.getModuleLabel();
+				String moduleSequence = jobDeploymentsPath.getModuleSequence();
 
 				undeployModule(jobName, ModuleType.job.toString(), moduleLabel);
 
@@ -750,7 +760,8 @@ public class ContainerRegistrar implements ApplicationListener<ContextRefreshedE
 						.setContainer(containerAttributes.getId())
 						.setStreamName(jobName)
 						.setModuleType(ModuleType.job.toString())
-						.setModuleLabel(moduleLabel).build();
+						.setModuleLabel(moduleLabel)
+						.setModuleSequence(moduleSequence).build();
 
 				CuratorFramework client = zkConnection.getClient();
 				try {

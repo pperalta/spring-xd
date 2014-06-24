@@ -70,9 +70,14 @@ public class JobDeploymentsPath {
 	private static final int MODULE_LABEL = 0;
 
 	/**
+	 * Index for module sequence in dot delimited deployment description.
+	 */
+	private static final int MODULE_SEQUENCE = 1;
+
+	/**
 	 * Index for container name in {@link #deploymentDesc} array.
 	 */
-	private static final int CONTAINER = 1;
+	private static final int CONTAINER = 2;
 
 	/**
 	 * Array of path elements.
@@ -82,7 +87,7 @@ public class JobDeploymentsPath {
 	/**
 	 * Array of module deployment description elements.
 	 */
-	private final String[] deploymentDesc = new String[2];
+	private final String[] deploymentDesc = new String[3];
 
 
 	/**
@@ -182,6 +187,27 @@ public class JobDeploymentsPath {
 	}
 
 	/**
+	 * Return the module sequence.
+	 *
+	 * @return module sequence
+	 */
+	public String getModuleSequence() {
+		return deploymentDesc[MODULE_SEQUENCE];
+	}
+
+	/**
+	 * Set the module sequence.
+	 *
+	 * @param moduleSequence module sequence
+	 *
+	 * @return this object
+	 */
+	public JobDeploymentsPath setModuleSequence(String moduleSequence) {
+		deploymentDesc[MODULE_SEQUENCE] = moduleSequence;
+		return this;
+	}
+
+	/**
 	 * Return the container name.
 	 *
 	 * @return container name
@@ -211,7 +237,8 @@ public class JobDeploymentsPath {
 	 */
 	public String build() throws IllegalStateException {
 		validate();
-		elements[DEPLOYMENT_DESC] = String.format("%s.%s", deploymentDesc[MODULE_LABEL], deploymentDesc[CONTAINER]);
+		elements[DEPLOYMENT_DESC] = String.format("%s.%s.%s", deploymentDesc[MODULE_LABEL],
+				deploymentDesc[MODULE_SEQUENCE], deploymentDesc[CONTAINER]);
 		return Paths.build(elements);
 	}
 
@@ -224,7 +251,8 @@ public class JobDeploymentsPath {
 	 */
 	public String buildWithNamespace() throws IllegalStateException {
 		validate();
-		elements[DEPLOYMENT_DESC] = String.format("%s.%s", deploymentDesc[MODULE_LABEL], deploymentDesc[CONTAINER]);
+		elements[DEPLOYMENT_DESC] = String.format("%s.%s.%s", deploymentDesc[MODULE_LABEL],
+				deploymentDesc[MODULE_SEQUENCE], deploymentDesc[CONTAINER]);
 		return Paths.buildWithNamespace(elements);
 	}
 

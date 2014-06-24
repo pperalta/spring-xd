@@ -16,31 +16,18 @@
 
 package org.springframework.xd.dirt.core;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 import org.springframework.util.Assert;
 import org.springframework.xd.dirt.zookeeper.Paths;
 
 /**
- * Builder object for paths under {@link Paths#DEPLOYMENTS} for module deployments. {@code ModuleDeploymentsPath}
- * can be used to take a full path and split it into its elements, for example:
- * <p>
- * <code>
- * ModuleDeploymentsPath deploymentsPath =
- *     new ModuleDeploymentsPath("/xd/deployments/modules/4dbd28e2-880d-4774/my-stream.source.http-0");
- * assertEquals("my-stream", deploymentsPath.getStreamName());
- * </code>
- * </p>
- * It can also be used to build a path, for example:
- * <p>
- * <code>
- * ModuleDeploymentsPath deploymentsPath = new ModuleDeploymentsPath().setStreamName("my-stream").setContainer(...)...;
- * assertEquals("/xd/deployments/modules/4dbd28e2-880d-4774/my-stream.source.http-0", deploymentsPath.build());
- * </code>
- * </p>
  *
- * @author Patrick Peralta
  * @author Ilayaperumal Gopinathan
  */
-public class ModuleDeploymentsPath {
+public class RequestedModulesPath {
 
 	/**
 	 * Index for {@link Paths#DEPLOYMENTS} in {@link #elements} array.
@@ -53,9 +40,9 @@ public class ModuleDeploymentsPath {
 	private static final int MODULES = 1;
 
 	/**
-	 * Index for container name in {@link #elements} array.
+	 * Index for {@link Paths#REQUESTED} node in {@link #elements} array.
 	 */
-	private static final int CONTAINER = 2;
+	private static final int REQUESTED = 2;
 
 	/**
 	 * Index for dot delimited module deployment description in {@link #elements} array.
@@ -96,9 +83,10 @@ public class ModuleDeploymentsPath {
 	 * Construct a {@code DeploymentsPath}. Use of this constructor means that a path will be created via
 	 * {@link #build()} or {@link #buildWithNamespace()}.
 	 */
-	public ModuleDeploymentsPath() {
+	public RequestedModulesPath() {
 		elements[DEPLOYMENTS] = Paths.DEPLOYMENTS;
 		elements[MODULES] = Paths.MODULES;
+		elements[REQUESTED] = Paths.REQUESTED;
 	}
 
 	/**
@@ -108,7 +96,7 @@ public class ModuleDeploymentsPath {
 	 *
 	 * @param path stream path
 	 */
-	public ModuleDeploymentsPath(String path) {
+	public RequestedModulesPath(String path) {
 		Assert.hasText(path);
 
 		String[] pathElements = path.split("\\/");
@@ -133,33 +121,30 @@ public class ModuleDeploymentsPath {
 
 		Assert.noNullElements(elements);
 		Assert.state(elements[DEPLOYMENTS].equals(Paths.DEPLOYMENTS));
+		Assert.state(elements[MODULES].equals(Paths.MODULES));
+		Assert.state(elements[REQUESTED].equals(Paths.REQUESTED));
 
-		String[] deploymentElements = elements[DEPLOYMENT_DESC].split(" ")[0].split("\\.");
-
-		Assert.state(deploymentElements.length == 4);
-
-		System.arraycopy(deploymentElements, 0, deploymentDesc, 0, 4);
+		if (elements[DEPLOYMENT_DESC] != null) {
+			int deploymentDescCount = deploymentDesc.length;
+			String[] deploymentElements = elements[DEPLOYMENT_DESC].split(" ")[0].split("\\.");
+			Assert.state(deploymentElements.length == deploymentDescCount);
+			System.arraycopy(deploymentElements, 0, deploymentDesc, 0, deploymentDescCount);
+		}
 	}
 
-	/**
-	 * Return the container name.
-	 *
-	 * @return container name
-	 */
-	public String getContainer() {
-		return elements[CONTAINER];
+	public static List<RequestedModulesPath> getModules(Collection<RequestedModulesPath> requestedModulesPaths,
+			String streamName) {
+		List<RequestedModulesPath> pathsToReturn = new ArrayList<RequestedModulesPath>();
+		for (RequestedModulesPath path : requestedModulesPaths) {
+			if (path.getStreamName().equals(streamName)) {
+				pathsToReturn.add(path);
+			}
+		}
+		return pathsToReturn;
 	}
 
-	/**
-	 * Set the container name.
-	 *
-	 * @param container container name
-	 *
-	 * @return this object
-	 */
-	public ModuleDeploymentsPath setContainer(String container) {
-		elements[CONTAINER] = container;
-		return this;
+	public String getModule() {
+		return String.format("%s.%s.%s", this.getModuleType(), this.getModuleLabel(), this.getModuleSequence());
 	}
 
 	/**
@@ -178,7 +163,7 @@ public class ModuleDeploymentsPath {
 	 *
 	 * @return this object
 	 */
-	public ModuleDeploymentsPath setStreamName(String streamName) {
+	public RequestedModulesPath setStreamName(String streamName) {
 		deploymentDesc[STREAM_NAME] = streamName;
 		return this;
 	}
@@ -199,7 +184,7 @@ public class ModuleDeploymentsPath {
 	 *
 	 * @return this object
 	 */
-	public ModuleDeploymentsPath setModuleType(String moduleType) {
+	public RequestedModulesPath setModuleType(String moduleType) {
 		deploymentDesc[MODULE_TYPE] = moduleType;
 		return this;
 	}
@@ -220,7 +205,7 @@ public class ModuleDeploymentsPath {
 	 *
 	 * @return this object
 	 */
-	public ModuleDeploymentsPath setModuleLabel(String moduleLabel) {
+	public RequestedModulesPath setModuleLabel(String moduleLabel) {
 		deploymentDesc[MODULE_LABEL] = moduleLabel;
 		return this;
 	}
@@ -241,7 +226,7 @@ public class ModuleDeploymentsPath {
 	 *
 	 * @return this object
 	 */
-	public ModuleDeploymentsPath setModuleSequence(String moduleSequence) {
+	public RequestedModulesPath setModuleSequence(String moduleSequence) {
 		deploymentDesc[MODULE_SEQUENCE] = moduleSequence;
 		return this;
 	}

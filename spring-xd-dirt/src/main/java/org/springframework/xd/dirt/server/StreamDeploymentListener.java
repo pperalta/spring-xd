@@ -16,8 +16,9 @@
 
 package org.springframework.xd.dirt.server;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -43,6 +44,7 @@ import org.springframework.xd.dirt.cluster.ContainerMatcher;
 import org.springframework.xd.dirt.cluster.NoContainerException;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
+import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.core.StreamDeploymentsPath;
 import org.springframework.xd.dirt.integration.bus.BusProperties;
@@ -61,6 +63,7 @@ import org.springframework.xd.module.ModuleType;
  *
  * @author Patrick Peralta
  * @author Mark Fisher
+ * @author Ilayaperumal Gopinathan
  */
 public class StreamDeploymentListener implements PathChildrenCacheListener {
 
@@ -68,6 +71,21 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 	 * Logger.
 	 */
 	private static final Logger logger = LoggerFactory.getLogger(StreamDeploymentListener.class);
+
+	/**
+	 * Container matcher for matching modules to containers.
+	 */
+	private final ContainerMatcher containerMatcher;
+
+	/**
+	 * Repository from which to obtain containers in the cluster.
+	 */
+	private final ContainerRepository containerRepository;
+
+	/**
+	 * Cache of children under the module deployment requests path.
+	 */
+	protected final PathChildrenCache moduleDeploymentRequests;
 
 	/**
 	 * Utility for writing module deployment requests to ZooKeeper.
@@ -94,7 +112,7 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 	 * {@link org.apache.curator.framework.recipes.cache.ChildData} in
 	 * stream deployments to Stream name.
 	 */
-	private final ContainerListener.DeploymentNameConverter deploymentNameConverter = new ContainerListener.DeploymentNameConverter();
+	private final ModuleRedeployer.DeploymentNameConverter deploymentNameConverter = new ModuleRedeployer.DeploymentNameConverter();
 
 	/**
 	 * Executor service dedicated to handling events raised from
@@ -124,9 +142,13 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 	 * @param stateCalculator calculator for stream state
 	 */
 	public StreamDeploymentListener(ZooKeeperConnection zkConnection,
+			PathChildrenCache moduleDeploymentRequests,
 			ContainerRepository containerRepository,
 			StreamFactory streamFactory,
 			ContainerMatcher containerMatcher, DeploymentUnitStateCalculator stateCalculator) {
+		this.moduleDeploymentRequests = moduleDeploymentRequests;
+		this.containerMatcher = containerMatcher;
+		this.containerRepository = containerRepository;
 		this.moduleDeploymentWriter = new ModuleDeploymentWriter(zkConnection,
 				containerRepository, containerMatcher);
 		this.streamFactory = streamFactory;
@@ -160,6 +182,17 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 		}
 	}
 
+	private void onChildRemoved(CuratorFramework client, ChildData data) throws Exception {
+		String streamName = Paths.stripPath(data.getPath());
+		RequestedModulesPath path;
+		for (ChildData requestedModulesData : moduleDeploymentRequests.getCurrentData()) {
+			path = new RequestedModulesPath(requestedModulesData.getPath());
+			if (path.getStreamName().equals(streamName)) {
+				client.delete().deletingChildrenIfNeeded().forPath(path.build());
+			}
+		}
+	}
+
 	/**
 	 * Issue deployment requests for the modules of the given stream.
 	 *
@@ -186,11 +219,40 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 		try {
 			StreamModuleDeploymentPropertiesProvider provider =
 					new StreamModuleDeploymentPropertiesProvider(stream);
-			Collection<ModuleDeploymentStatus> deploymentStatus =
-					moduleDeploymentWriter.writeDeployment(stream.getDeploymentOrderIterator(),
-							provider);
+			List<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
+			for (Iterator<ModuleDescriptor> descriptors = stream.getDeploymentOrderIterator(); descriptors.hasNext();) {
+				ModuleDescriptor descriptor = descriptors.next();
+				ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
+				Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
+						deploymentProperties,
+						containerRepository.findAll()));
+				// Modules count == 0
+				if (deploymentProperties.getCount() == 0) {
+					deploymentProperties.putAll(provider.partitionProperties(descriptor));
+					String moduleSequence = String.valueOf(0);
+					createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+					for (Container container : matchedContainers) {
+						deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor, moduleSequence,
+								deploymentProperties,
+								container));
+					}
+				}
+				// Modules count > 0
+				else {
+					for (int i = 1; i <= deploymentProperties.getCount(); i++) {
+						deploymentProperties.putAll(provider.partitionProperties(descriptor));
+						String moduleSequence = String.valueOf(i);
+						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+						if (matchedContainers.size() > 0) {
+							deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor, moduleSequence,
+									deploymentProperties,
+									matchedContainers.pop()));
+						}
+					}
+				}
+			}
 
-			DeploymentUnitStatus status = stateCalculator.calculate(stream, provider, deploymentStatus);
+			DeploymentUnitStatus status = stateCalculator.calculate(stream, provider, deploymentStatuses);
 			logger.info("Deployment status for stream '{}': {}", stream.getName(), status);
 
 			client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
@@ -203,6 +265,21 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 		}
 		catch (Exception e) {
 			throw ZooKeeperUtils.wrapThrowable(e);
+		}
+	}
+
+	private void createRequestedModulesPath(CuratorFramework client, ModuleDescriptor descriptor,
+			ModuleDeploymentProperties deploymentProperties, String moduleSequence) {
+		// Create and set the data for the requested modules path
+		String requestedModulesPath = new RequestedModulesPath().setStreamName(
+				descriptor.getGroup()).setModuleType(descriptor.getType().toString()).setModuleLabel(
+				descriptor.getModuleLabel()).setModuleSequence(moduleSequence).build();
+		try {
+			client.create().creatingParentsIfNeeded().forPath(requestedModulesPath,
+					ZooKeeperUtils.mapToBytes(deploymentProperties));
+		}
+		catch (Exception e) {
+			ZooKeeperUtils.wrapThrowable(e);
 		}
 	}
 
@@ -230,6 +307,7 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 							Paths.build(streamModulesPath, moduleDeployment));
 					statusList.add(new ModuleDeploymentStatus(
 							streamDeploymentsPath.getContainer(),
+							streamDeploymentsPath.getModuleSequence(),
 							new ModuleDescriptor.Key(streamName,
 									ModuleType.valueOf(streamDeploymentsPath.getModuleType()),
 									streamDeploymentsPath.getModuleLabel()),
@@ -259,7 +337,7 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 	 * generates properties required for stream partitioning support.
 	 */
 	public static class StreamModuleDeploymentPropertiesProvider
-			implements ContainerAwareModuleDeploymentPropertiesProvider {
+			implements ModuleDeploymentPropertiesProvider {
 
 		/**
 		 * Map to keep track of how many instances of a module this provider
@@ -305,20 +383,15 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 			return properties;
 		}
 
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public ModuleDeploymentProperties propertiesForDescriptor(ModuleDescriptor descriptor, Container container) {
+		protected ModuleDeploymentProperties partitionProperties(ModuleDescriptor moduleDescriptor) {
 			List<ModuleDescriptor> streamModules = stream.getModuleDescriptors();
-			ModuleDeploymentProperties properties = propertiesForDescriptor(descriptor);
-
-			int moduleIndex = descriptor.getIndex();
+			ModuleDeploymentProperties properties = propertiesForDescriptor(moduleDescriptor);
+			int moduleIndex = moduleDescriptor.getIndex();
 			if (moduleIndex > 0) {
 				ModuleDescriptor previous = streamModules.get(moduleIndex - 1);
 				ModuleDeploymentProperties previousProperties = propertiesForDescriptor(previous);
 				if (hasPartitionKeyProperty(previousProperties)) {
-					ModuleDescriptor.Key moduleKey = descriptor.createKey();
+					ModuleDescriptor.Key moduleKey = moduleDescriptor.createKey();
 					Integer index = mapModuleCount.get(moduleKey);
 					if (index == null) {
 						index = 0;
@@ -333,13 +406,13 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 							propertiesForDescriptor(streamModules.get(moduleIndex + 1));
 
 					String count = nextProperties.get("count");
-					validateCountProperty(count, descriptor);
+					validateCountProperty(count, moduleDescriptor);
 					properties.put("producer.partitionCount", count);
 				}
 				catch (IndexOutOfBoundsException e) {
 					logger.warn("Module '{}' is a sink module which contains a property " +
 							"of '{}' used for data partitioning; this feature is only " +
-							"supported for modules that produce data", descriptor,
+							"supported for modules that produce data", moduleDescriptor,
 							"producer.partitionKeyExpression");
 
 				}
@@ -371,7 +444,7 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 					}
 				}
 			}
-			mapDeploymentProperties.put(descriptor.createKey(), properties);
+			mapDeploymentProperties.put(moduleDescriptor.createKey(), properties);
 			return properties;
 		}
 
@@ -453,6 +526,9 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 				switch (event.getType()) {
 					case CHILD_ADDED:
 						onChildAdded(client, event.getData());
+						break;
+					case CHILD_REMOVED:
+						onChildRemoved(client, event.getData());
 						break;
 					default:
 						break;
