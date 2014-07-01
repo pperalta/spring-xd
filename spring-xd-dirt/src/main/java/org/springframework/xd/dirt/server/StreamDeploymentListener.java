@@ -48,7 +48,6 @@ import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.core.StreamDeploymentsPath;
-import org.springframework.xd.dirt.integration.bus.BusProperties;
 import org.springframework.xd.dirt.server.ModuleDeploymentWriter.ResultCollector;
 import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
@@ -132,7 +131,6 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 			return thread;
 		}
 	});
-
 
 	/**
 	 * Construct a StreamDeploymentListener.
@@ -221,6 +219,8 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 		try {
 			StreamModuleDeploymentPropertiesProvider provider =
 					new StreamModuleDeploymentPropertiesProvider(stream);
+			List<RuntimeDeploymentPropertiesProvider> runtimePropertiesProviders = new ArrayList<RuntimeDeploymentPropertiesProvider>();
+			runtimePropertiesProviders.add(new StreamPartitionPropertiesProvider(stream));
 			Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
 			for (Iterator<ModuleDescriptor> descriptors = stream.getDeploymentOrderIterator(); descriptors.hasNext();) {
 				ModuleDescriptor descriptor = descriptors.next();
@@ -231,7 +231,9 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 				ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
 				// Modules count == 0
 				if (deploymentProperties.getCount() == 0) {
-					deploymentProperties.putAll(provider.partitionProperties(descriptor));
+					for (RuntimeDeploymentPropertiesProvider runtimePropertiesProvider : runtimePropertiesProviders) {
+						deploymentProperties.putAll(runtimePropertiesProvider.runtimeProperties(descriptor));
+					}
 					String moduleSequence = String.valueOf(0);
 					createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
 					for (Container container : matchedContainers) {
@@ -242,7 +244,9 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 				// Modules count > 0
 				else {
 					for (int i = 1; i <= deploymentProperties.getCount(); i++) {
-						deploymentProperties.putAll(provider.partitionProperties(descriptor));
+						for (RuntimeDeploymentPropertiesProvider runtimePropertiesProvider : runtimePropertiesProviders) {
+							deploymentProperties.putAll(runtimePropertiesProvider.runtimeProperties(descriptor));
+						}
 						String moduleSequence = String.valueOf(i);
 						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
 						if (matchedContainers.size() > 0) {
@@ -343,14 +347,6 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 			implements ModuleDeploymentPropertiesProvider {
 
 		/**
-		 * Map to keep track of how many instances of a module this provider
-		 * has generated properties for. This is used to generate a unique
-		 * id for each module deployment per container for stream partitioning.
-		 */
-		private final Map<ModuleDescriptor.Key, Integer> mapModuleCount =
-				new HashMap<ModuleDescriptor.Key, Integer>();
-
-		/**
 		 * Cache of module deployment properties.
 		 */
 		private final Map<ModuleDescriptor.Key, ModuleDeploymentProperties> mapDeploymentProperties =
@@ -385,112 +381,7 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 			}
 			return properties;
 		}
-
-		protected ModuleDeploymentProperties partitionProperties(ModuleDescriptor moduleDescriptor) {
-			List<ModuleDescriptor> streamModules = stream.getModuleDescriptors();
-			ModuleDeploymentProperties properties = propertiesForDescriptor(moduleDescriptor);
-			int moduleIndex = moduleDescriptor.getIndex();
-			if (moduleIndex > 0) {
-				ModuleDescriptor previous = streamModules.get(moduleIndex - 1);
-				ModuleDeploymentProperties previousProperties = propertiesForDescriptor(previous);
-				if (hasPartitionKeyProperty(previousProperties)) {
-					ModuleDescriptor.Key moduleKey = moduleDescriptor.createKey();
-					Integer index = mapModuleCount.get(moduleKey);
-					if (index == null) {
-						index = 0;
-					}
-					properties.put("consumer.partitionIndex", String.valueOf(index++));
-					mapModuleCount.put(moduleKey, index);
-				}
-			}
-			if (hasPartitionKeyProperty(properties)) {
-				try {
-					ModuleDeploymentProperties nextProperties =
-							propertiesForDescriptor(streamModules.get(moduleIndex + 1));
-
-					String count = nextProperties.get("count");
-					validateCountProperty(count, moduleDescriptor);
-					properties.put("producer.partitionCount", count);
-				}
-				catch (IndexOutOfBoundsException e) {
-					logger.warn("Module '{}' is a sink module which contains a property " +
-							"of '{}' used for data partitioning; this feature is only " +
-							"supported for modules that produce data", moduleDescriptor,
-							"producer.partitionKeyExpression");
-
-				}
-			}
-			else if (streamModules.size() > moduleIndex + 1) {
-				/*
-				 *  A direct binding is allowed if all of the following are true:
-				 *  1. the user did not explicitly disallow direct binding
-				 *  2. this module is not a partitioning producer
-				 *  3. this module is not the last one in a stream
-				 *  4. both this module and the next module have a count of 0
-				 *  5. both this module and the next module have the same criteria (both can be null)
-				 */
-				String directBindingKey = "producer." + BusProperties.DIRECT_BINDING_ALLOWED;
-				String directBindingValue = properties.get(directBindingKey);
-				if (directBindingValue != null && !"false".equalsIgnoreCase(properties.get(directBindingKey))) {
-					logger.warn(
-							"Only 'false' is allowed as an explicit value for the {} property,  but the value was: '{}'",
-							directBindingKey, directBindingValue);
-				}
-				if (!"false".equalsIgnoreCase(properties.get(directBindingKey))) {
-					ModuleDeploymentProperties nextProperties = propertiesForDescriptor(streamModules.get(moduleIndex + 1));
-					if (properties.getCount() == 0 && nextProperties.getCount() == 0) {
-						String criteria = properties.getCriteria();
-						if ((criteria == null && nextProperties.getCriteria() == null)
-								|| (criteria != null && criteria.equals(nextProperties.getCriteria()))) {
-							properties.put(directBindingKey, Boolean.toString(true));
-						}
-					}
-				}
-			}
-			mapDeploymentProperties.put(moduleDescriptor.createKey(), properties);
-			return properties;
-		}
-
-		/**
-		 * Return {@code true} if the provided properties include a property
-		 * used to extract a partition key.
-		 *
-		 * @param properties properties to examine for a partition key property
-		 * @return true if the properties contain a partition key property
-		 */
-		private boolean hasPartitionKeyProperty(ModuleDeploymentProperties properties) {
-			return (properties.containsKey("producer.partitionKeyExpression") || properties.containsKey("producer.partitionKeyExtractorClass"));
-		}
-
-		/**
-		 * Validate the value of {@code count} for the purposes of partitioning.
-		 * The value of the string must consist of an integer > 1.
-		 *
-		 * @param count       value to validate
-		 * @param descriptor  module descriptor this {@code count} property
-		 *                    is associated with
-		 *
-		 * @throws IllegalArgumentException if the value of the string
-		 *         does not consist of an integer > 1
-		 */
-		private void validateCountProperty(String count, ModuleDescriptor descriptor) {
-			Assert.hasText(count, String.format("'count' property is required " +
-					"in properties for module '%s' in order to support partitioning", descriptor));
-
-			try {
-				Assert.isTrue(Integer.parseInt(count) > 1,
-						String.format("'count' property for module '%s' must contain an " +
-								"integer > 1, current value is '%s'", descriptor, count));
-			}
-			catch (NumberFormatException e) {
-				throw new IllegalArgumentException(String.format("'count' property for " +
-						"module %s does not contain a valid integer, current value is '%s'",
-						descriptor, count));
-			}
-		}
-
 	}
-
 
 	/**
 	 * Callable that handles events from a {@link org.apache.curator.framework.recipes.cache.PathChildrenCache}. This
