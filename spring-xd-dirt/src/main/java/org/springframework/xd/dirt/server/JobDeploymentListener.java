@@ -18,6 +18,7 @@ package org.springframework.xd.dirt.server;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
@@ -42,6 +43,7 @@ import org.springframework.xd.dirt.core.Job;
 import org.springframework.xd.dirt.core.JobDeploymentsPath;
 import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.job.JobFactory;
+import org.springframework.xd.dirt.server.ModuleDeploymentWriter.ResultCollector;
 import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
 import org.springframework.xd.dirt.zookeeper.ChildPathIterator;
 import org.springframework.xd.dirt.zookeeper.Paths;
@@ -204,21 +206,20 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 			descriptors.add(job.getJobModuleDescriptor());
 
 			try {
-				List<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
+				Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
 				for (ModuleDescriptor descriptor : job.getModuleDescriptors()) {
 					ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
 					Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
 							deploymentProperties,
 							containerRepository.findAll()));
+					ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
 					// Modules count == 0
 					if (deploymentProperties.getCount() == 0) {
 						String moduleSequence = String.valueOf(0);
 						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
-						if (matchedContainers.size() > 0) {
-							deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor,
-									moduleSequence,
-									deploymentProperties,
-									matchedContainers.pop()));
+						for (Container container : matchedContainers) {
+							moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+									descriptor, container, moduleSequence);
 						}
 					}
 					// Modules count > 0
@@ -227,13 +228,13 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 							String moduleSequence = String.valueOf(i);
 							createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
 							if (matchedContainers.size() > 0) {
-								deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor,
-										moduleSequence,
-										deploymentProperties,
-										matchedContainers.pop()));
+								moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+										descriptor, matchedContainers.pop(), moduleSequence);
 							}
 						}
 					}
+					deploymentStatuses.addAll(moduleDeploymentWriter.processResults(client,
+							collector));
 
 					DeploymentUnitStatus status = stateCalculator.calculate(job, provider, deploymentStatuses);
 

@@ -173,7 +173,7 @@ public class ModuleDeploymentWriter {
 		return statuses.iterator().next();
 	}
 
-	private void writeModuleDeployment(CuratorFramework client, ResultCollector collector,
+	protected void writeModuleDeployment(CuratorFramework client, ResultCollector collector,
 			ModuleDeploymentProperties deploymentProperties,
 			ModuleDescriptor descriptor, Container container, String moduleSequence) throws InterruptedException {
 		String containerName = container.getName();
@@ -216,7 +216,7 @@ public class ModuleDeploymentWriter {
 	 * @return collection of results for module deployment requests
 	 * @throws InterruptedException
 	 */
-	private Collection<ModuleDeploymentStatus> processResults(CuratorFramework client,
+	protected Collection<ModuleDeploymentStatus> processResults(CuratorFramework client,
 			ResultCollector collector) throws InterruptedException {
 		Collection<ModuleDeploymentStatus> statuses = collector.getResults();
 
@@ -402,7 +402,7 @@ public class ModuleDeploymentWriter {
 	 * used to collect results from the target containers updating the
 	 * module deployment paths.
 	 */
-	private class ResultCollector implements CuratorWatcher {
+	protected class ResultCollector implements CuratorWatcher {
 
 		/**
 		 * Pending requests for module deployments to containers.

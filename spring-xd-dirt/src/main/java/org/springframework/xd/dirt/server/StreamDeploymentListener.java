@@ -18,6 +18,7 @@ package org.springframework.xd.dirt.server;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -48,6 +49,7 @@ import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.core.StreamDeploymentsPath;
 import org.springframework.xd.dirt.integration.bus.BusProperties;
+import org.springframework.xd.dirt.server.ModuleDeploymentWriter.ResultCollector;
 import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
 import org.springframework.xd.dirt.zookeeper.ChildPathIterator;
@@ -219,22 +221,22 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 		try {
 			StreamModuleDeploymentPropertiesProvider provider =
 					new StreamModuleDeploymentPropertiesProvider(stream);
-			List<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
+			Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
 			for (Iterator<ModuleDescriptor> descriptors = stream.getDeploymentOrderIterator(); descriptors.hasNext();) {
 				ModuleDescriptor descriptor = descriptors.next();
 				ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
 				Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
 						deploymentProperties,
 						containerRepository.findAll()));
+				ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
 				// Modules count == 0
 				if (deploymentProperties.getCount() == 0) {
 					deploymentProperties.putAll(provider.partitionProperties(descriptor));
 					String moduleSequence = String.valueOf(0);
 					createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
 					for (Container container : matchedContainers) {
-						deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor, moduleSequence,
-								deploymentProperties,
-								container));
+						moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+								descriptor, container, moduleSequence);
 					}
 				}
 				// Modules count > 0
@@ -244,12 +246,13 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 						String moduleSequence = String.valueOf(i);
 						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
 						if (matchedContainers.size() > 0) {
-							deploymentStatuses.add(moduleDeploymentWriter.writeDeployment(descriptor, moduleSequence,
-									deploymentProperties,
-									matchedContainers.pop()));
+							moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+									descriptor, matchedContainers.pop(), moduleSequence);
 						}
 					}
 				}
+				deploymentStatuses.addAll(moduleDeploymentWriter.processResults(client,
+						collector));
 			}
 
 			DeploymentUnitStatus status = stateCalculator.calculate(stream, provider, deploymentStatuses);
