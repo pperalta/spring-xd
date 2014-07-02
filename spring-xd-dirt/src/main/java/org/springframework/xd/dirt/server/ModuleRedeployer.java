@@ -281,11 +281,13 @@ public abstract class ModuleRedeployer {
 	 */
 	protected ModuleDeploymentStatus deployModule(CuratorFramework client,
 			ModuleDeployment moduleDeployment, ContainerMatcher containerMatcher) throws Exception {
-		transitionToDeploying(client, moduleDeployment.deploymentUnit);
-
-		return moduleDeploymentWriter.writeDeployment(moduleDeployment.moduleDescriptor,
-				moduleDeployment.moduleSequence,
-				moduleDeployment.deploymentProperties, containerMatcher);
+		// todo: fix
+		throw new UnsupportedOperationException("fix");
+//		transitionToDeploying(client, moduleDeployment.deploymentUnit);
+//
+//		return moduleDeploymentWriter.writeDeployment(moduleDeployment.moduleDescriptor,
+//				moduleDeployment.moduleSequence,
+//				moduleDeployment.deploymentProperties, containerMatcher);
 	}
 
 	/**
@@ -306,19 +308,23 @@ public abstract class ModuleRedeployer {
 	 */
 	protected ModuleDeploymentStatus deployModule(CuratorFramework client,
 			ModuleDeployment moduleDeployment, final Container container) throws Exception {
-		transitionToDeploying(client, moduleDeployment.deploymentUnit);
-		ContainerMatcher matcher = new ContainerMatcher() {
 
-			@Override
-			public Collection<Container> match(ModuleDescriptor moduleDescriptor,
-					ModuleDeploymentProperties deploymentProperties,
-					Iterable<Container> containers) {
-				return Collections.singleton(container);
-			}
-		};
-		return moduleDeploymentWriter.writeDeployment(moduleDeployment.moduleDescriptor,
-				moduleDeployment.moduleSequence,
-				moduleDeployment.deploymentProperties, matcher);
+		// todo: fix
+		throw new UnsupportedOperationException("fix");
+
+//		transitionToDeploying(client, moduleDeployment.deploymentUnit);
+//		ContainerMatcher matcher = new ContainerMatcher() {
+//
+//			@Override
+//			public Collection<Container> match(ModuleDescriptor moduleDescriptor,
+//					ModuleDeploymentProperties deploymentProperties,
+//					Iterable<Container> containers) {
+//				return Collections.singleton(container);
+//			}
+//		};
+//		return moduleDeploymentWriter.writeDeployment(moduleDeployment.moduleDescriptor,
+//				moduleDeployment.moduleSequence,
+//				moduleDeployment.deploymentProperties, matcher);
 	}
 
 	/**

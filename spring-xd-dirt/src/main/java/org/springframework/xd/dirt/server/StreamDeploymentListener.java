@@ -16,10 +16,8 @@
 
 package org.springframework.xd.dirt.server;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -48,7 +46,6 @@ import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.core.StreamDeploymentsPath;
-import org.springframework.xd.dirt.server.ModuleDeploymentWriter.ResultCollector;
 import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
 import org.springframework.xd.dirt.zookeeper.ChildPathIterator;
@@ -58,6 +55,7 @@ import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.ModuleDescriptor;
 import org.springframework.xd.module.ModuleType;
+import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 
 /**
  * Listener implementation that handles stream deployment requests.
@@ -203,6 +201,7 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 	private void deployStream(CuratorFramework client, Stream stream) throws InterruptedException {
 		String statusPath = Paths.build(Paths.STREAM_DEPLOYMENTS, stream.getName(), Paths.STATUS);
 
+		// assert that the deployment status has been correctly set to "deploying"
 		DeploymentUnitStatus deployingStatus = null;
 		try {
 			deployingStatus = new DeploymentUnitStatus(ZooKeeperUtils.bytesToMap(
@@ -217,49 +216,42 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 						stream.getName(), deployingStatus));
 
 		try {
-			StreamModuleDeploymentPropertiesProvider provider =
-					new StreamModuleDeploymentPropertiesProvider(stream);
-			List<RuntimeDeploymentPropertiesProvider> runtimePropertiesProviders = new ArrayList<RuntimeDeploymentPropertiesProvider>();
-			runtimePropertiesProviders.add(new StreamPartitionPropertiesProvider(stream));
 			Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
-			for (Iterator<ModuleDescriptor> descriptors = stream.getDeploymentOrderIterator(); descriptors.hasNext();) {
+			StreamModuleDeploymentPropertiesProvider deploymentProvider = new StreamModuleDeploymentPropertiesProvider(stream);
+			for (Iterator<ModuleDescriptor> descriptors = stream.getDeploymentOrderIterator(); descriptors.hasNext(); ) {
 				ModuleDescriptor descriptor = descriptors.next();
-				ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
-				Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
-						deploymentProperties,
-						containerRepository.findAll()));
-				ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
-				// Modules count == 0
-				if (deploymentProperties.getCount() == 0) {
-					for (RuntimeDeploymentPropertiesProvider runtimePropertiesProvider : runtimePropertiesProviders) {
-						deploymentProperties.putAll(runtimePropertiesProvider.runtimeProperties(descriptor));
-					}
-					String moduleSequence = String.valueOf(0);
-					createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
-					for (Container container : matchedContainers) {
-						moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
-								descriptor, container, moduleSequence);
-					}
+				ModuleDeploymentProperties deploymentProperties = deploymentProvider.propertiesForDescriptor(descriptor);
+
+				// write out all of the required modules for this stream (including runtime properties);
+				// this does not actually perform a deployment...this data is used in case there are not
+				// enough containers to deploy the stream
+				StreamPartitionPropertiesProvider runtimeProvider =
+						new StreamPartitionPropertiesProvider(stream, deploymentProvider);
+				int moduleCount = deploymentProperties.getCount();
+				if (moduleCount == 0) {
+					createRequestedModulesPath(client, descriptor, runtimeProvider.runtimeProperties(descriptor));
 				}
-				// Modules count > 0
 				else {
-					for (int i = 1; i <= deploymentProperties.getCount(); i++) {
-						for (RuntimeDeploymentPropertiesProvider runtimePropertiesProvider : runtimePropertiesProviders) {
-							deploymentProperties.putAll(runtimePropertiesProvider.runtimeProperties(descriptor));
-						}
-						String moduleSequence = String.valueOf(i);
-						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
-						if (matchedContainers.size() > 0) {
-							moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
-									descriptor, matchedContainers.pop(), moduleSequence);
-						}
+					for (int i = 0; i < moduleCount; i++) {
+						createRequestedModulesPath(client, descriptor, runtimeProvider.runtimeProperties(descriptor));
 					}
 				}
-				deploymentStatuses.addAll(moduleDeploymentWriter.processResults(client,
-						collector));
+
+				// find the containers that can deploy these modules
+				Collection<Container> containers = containerMatcher.match(descriptor, deploymentProperties,
+						containerRepository.findAll());
+
+				// write out the deployment requests targeted to the containers obtained above;
+				// a new instance of StreamPartitionPropertiesProvider is created since this
+				// object is responsible for generating unique sequence ids for modules
+				StreamPartitionPropertiesProvider deploymentRuntimeProvider =
+						new StreamPartitionPropertiesProvider(stream, deploymentProvider);
+
+				deploymentStatuses.addAll(moduleDeploymentWriter.writeDeployment(
+						descriptor, deploymentRuntimeProvider, containers));
 			}
 
-			DeploymentUnitStatus status = stateCalculator.calculate(stream, provider, deploymentStatuses);
+			DeploymentUnitStatus status = stateCalculator.calculate(stream, deploymentProvider, deploymentStatuses);
 			logger.info("Deployment status for stream '{}': {}", stream.getName(), status);
 
 			client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
@@ -273,20 +265,79 @@ public class StreamDeploymentListener implements PathChildrenCacheListener {
 		catch (Exception e) {
 			throw ZooKeeperUtils.wrapThrowable(e);
 		}
+
+
+//			List<RuntimeDeploymentPropertiesProvider> runtimePropertiesProviders = new ArrayList<RuntimeDeploymentPropertiesProvider>();
+//			runtimePropertiesProviders.add(new StreamPartitionPropertiesProvider(stream));
+//			Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
+//			for (Iterator<ModuleDescriptor> descriptors = stream.getDeploymentOrderIterator(); descriptors.hasNext();) {
+//				ModuleDescriptor descriptor = descriptors.next();
+//				ModuleDeploymentProperties deploymentProperties = deploymentProvider.propertiesForDescriptor(descriptor);
+//				Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
+//						deploymentProperties,
+//						containerRepository.findAll()));
+//				ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
+//				// Modules count == 0
+//				if (deploymentProperties.getCount() == 0) {
+//					for (RuntimeDeploymentPropertiesProvider runtimePropertiesProvider : runtimePropertiesProviders) {
+//						deploymentProperties.putAll(runtimePropertiesProvider.runtimeProperties(descriptor));
+//					}
+//					String moduleSequence = String.valueOf(0);
+//					createRequestedModulesPath(client, descriptor, deploymentProperties);
+//					for (Container container : matchedContainers) {
+//						moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+//								descriptor, container, moduleSequence);
+//					}
+//				}
+//				// Modules count > 0
+//				else {
+//					for (int i = 1; i <= deploymentProperties.getCount(); i++) {
+//						for (RuntimeDeploymentPropertiesProvider runtimePropertiesProvider : runtimePropertiesProviders) {
+//							deploymentProperties.putAll(runtimePropertiesProvider.runtimeProperties(descriptor));
+//						}
+//						String moduleSequence = String.valueOf(i);
+//						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+//						if (matchedContainers.size() > 0) {
+//							moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+//									descriptor, matchedContainers.pop(), moduleSequence);
+//						}
+//					}
+//				}
+//				deploymentStatuses.addAll(moduleDeploymentWriter.processResults(client,
+//						collector));
+//			}
+//
+//			DeploymentUnitStatus status = stateCalculator.calculate(stream, deploymentProvider, deploymentStatuses);
+//			logger.info("Deployment status for stream '{}': {}", stream.getName(), status);
+//
+//			client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
+//		}
+//		catch (NoContainerException e) {
+//			logger.warn("No containers available for deployment of stream {}", stream.getName());
+//		}
+//		catch (InterruptedException e) {
+//			throw e;
+//		}
+//		catch (Exception e) {
+//			throw ZooKeeperUtils.wrapThrowable(e);
+//		}
 	}
 
 	private void createRequestedModulesPath(CuratorFramework client, ModuleDescriptor descriptor,
-			ModuleDeploymentProperties deploymentProperties, String moduleSequence) {
+			RuntimeModuleDeploymentProperties deploymentProperties) {
 		// Create and set the data for the requested modules path
-		String requestedModulesPath = new RequestedModulesPath().setStreamName(
-				descriptor.getGroup()).setModuleType(descriptor.getType().toString()).setModuleLabel(
-				descriptor.getModuleLabel()).setModuleSequence(moduleSequence).build();
+		String requestedModulesPath = new RequestedModulesPath()
+				.setStreamName(descriptor.getGroup())
+				.setModuleType(descriptor.getType().toString())
+				.setModuleLabel(descriptor.getModuleLabel())
+				.setModuleSequence(deploymentProperties.getSequenceAsString())
+				.build();
 		try {
 			client.create().creatingParentsIfNeeded().forPath(requestedModulesPath,
 					ZooKeeperUtils.mapToBytes(deploymentProperties));
 		}
 		catch (Exception e) {
-			ZooKeeperUtils.wrapThrowable(e);
+			throw ZooKeeperUtils.wrapThrowable(e);
 		}
 	}
 

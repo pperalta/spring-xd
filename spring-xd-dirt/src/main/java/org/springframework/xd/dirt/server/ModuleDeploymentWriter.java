@@ -17,6 +17,7 @@
 package org.springframework.xd.dirt.server;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,6 +43,7 @@ import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.ModuleDescriptor;
 import org.springframework.xd.module.ModuleType;
+import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 
 /**
  * Utility class to write module deployment requests under {@code /xd/deployments/modules}.
@@ -139,7 +141,7 @@ public class ModuleDeploymentWriter {
 	 * one container. This method should be used for module redeployment
 	 * when a container exits the cluster.
 	 *
-	 * @param moduleDescriptor      descriptor for module to deploy
+	 * @param descriptor            descriptor for module to deploy
 	 * @param deploymentProperties  deployment properties for module
 	 * @param containerMatcher      matcher for modules to containers
 	 * @return result of request
@@ -147,42 +149,53 @@ public class ModuleDeploymentWriter {
 	 * @throws NoContainerException if there are no containers that match the criteria
 	 *                              for module deployment
 	 */
-	public ModuleDeploymentStatus writeDeployment(ModuleDescriptor descriptor, String moduleSequence,
-			ModuleDeploymentProperties deploymentProperties, ContainerMatcher containerMatcher)
-			throws InterruptedException, NoContainerException {
-		Collection<Container> matchedContainers = containerMatcher.match(descriptor, deploymentProperties,
-				containerRepository.findAll());
-		if (matchedContainers.isEmpty()) {
-			throw new NoContainerException();
-		}
-		return writeDeployment(descriptor, moduleSequence, deploymentProperties, matchedContainers.iterator().next());
-	}
+//	public ModuleDeploymentStatus writeDeployment(ModuleDescriptor descriptor, ModuleDeploymentProperties deploymentProperties,
+//			ContainerMatcher containerMatcher)
+//			throws InterruptedException, NoContainerException {
+//		Collection<Container> matchedContainers = containerMatcher.match(descriptor, deploymentProperties,
+//				containerRepository.findAll());
+//		if (matchedContainers.isEmpty()) {
+//			throw new NoContainerException();
+//		}
+//		return writeDeployment(descriptor, deploymentProperties, matchedContainers.iterator().next());
+//	}
 
-	public ModuleDeploymentStatus writeDeployment(ModuleDescriptor descriptor, String moduleSequence,
-			ModuleDeploymentProperties deploymentProperties, Container container)
+//	public ModuleDeploymentStatus writeDeployment(ModuleDescriptor descriptor,
+//			RuntimeModuleDeploymentProperties deploymentProperties, Container container)
+//			throws InterruptedException, NoContainerException {
+//
+//		return writeDeployment(descriptor, deploymentProperties, Collections.singleton(container)).iterator().next();
+//	}
+
+	public Collection<ModuleDeploymentStatus> writeDeployment(ModuleDescriptor descriptor,
+			RuntimeDeploymentPropertiesProvider provider, Collection<Container> containers)
 			throws InterruptedException, NoContainerException {
-		CuratorFramework client = zkConnection.getClient();
 		ResultCollector collector = new ResultCollector();
-		writeModuleDeployment(client, collector, deploymentProperties,
-				descriptor,
-				container, moduleSequence);
-		Collection<ModuleDeploymentStatus> statuses = processResults(client, collector);
+
+		for (Container container : containers) {
+			writeModuleDeployment(descriptor, provider, container, collector);
+		}
+
+		Collection<ModuleDeploymentStatus> statuses = processResults(collector);
 		if (statuses.isEmpty()) {
 			throw new NoContainerException();
 		}
-		return statuses.iterator().next();
+
+		return statuses;
 	}
 
-	protected void writeModuleDeployment(CuratorFramework client, ResultCollector collector,
-			ModuleDeploymentProperties deploymentProperties,
-			ModuleDescriptor descriptor, Container container, String moduleSequence) throws InterruptedException {
+	private void writeModuleDeployment(ModuleDescriptor descriptor, RuntimeDeploymentPropertiesProvider provider,
+			Container container, ResultCollector collector) throws InterruptedException {
+		RuntimeModuleDeploymentProperties deploymentProperties = provider.runtimeProperties(descriptor);
 		String containerName = container.getName();
+		String moduleSequence = deploymentProperties.getSequenceAsString();
 		String deploymentPath = new ModuleDeploymentsPath()
 				.setContainer(containerName)
 				.setStreamName(descriptor.getGroup())
 				.setModuleType(descriptor.getType().toString())
 				.setModuleLabel(descriptor.getModuleLabel())
-				.setModuleSequence(moduleSequence).build();
+				.setModuleSequence(moduleSequence)
+				.build();
 		String statusPath = Paths.build(deploymentPath, Paths.STATUS);
 		collector.addPending(containerName, moduleSequence, descriptor.createKey());
 		try {
@@ -193,7 +206,7 @@ public class ModuleDeploymentWriter {
 			// a. that the container has already updated this node (unlikely)
 			// b. the deployment was previously written; in this case read
 			//    the status written by the container
-			byte[] data = client.getData().usingWatcher(collector).forPath(statusPath);
+			byte[] data = zkConnection.getClient().getData().usingWatcher(collector).forPath(statusPath);
 			if (data != null && data.length > 0) {
 				collector.addResult(createResult(deploymentPath, data));
 			}
@@ -211,13 +224,11 @@ public class ModuleDeploymentWriter {
 	 * or until a timeout occurs. Additionally, remove any module deployment
 	 * paths for deployments that failed or timed out.
 	 *
-	 * @param client     Curator client
 	 * @param collector  ZooKeeper watch used to collect results
 	 * @return collection of results for module deployment requests
 	 * @throws InterruptedException
 	 */
-	protected Collection<ModuleDeploymentStatus> processResults(CuratorFramework client,
-			ResultCollector collector) throws InterruptedException {
+	private Collection<ModuleDeploymentStatus> processResults(ResultCollector collector) throws InterruptedException {
 		Collection<ModuleDeploymentStatus> statuses = collector.getResults();
 
 		// remove the ZK path for any failed deployments
@@ -231,7 +242,7 @@ public class ModuleDeploymentWriter {
 						.setModuleSequence(deploymentStatus.getModuleSequence()).build();
 				logger.debug("Unsuccessful deployment: {}; removing path {}", deploymentStatus, path);
 				try {
-					client.delete().deletingChildrenIfNeeded().forPath(path);
+					zkConnection.getClient().delete().deletingChildrenIfNeeded().forPath(path);
 				}
 				catch (InterruptedException e) {
 					throw e;
@@ -402,7 +413,7 @@ public class ModuleDeploymentWriter {
 	 * used to collect results from the target containers updating the
 	 * module deployment paths.
 	 */
-	protected class ResultCollector implements CuratorWatcher {
+	private class ResultCollector implements CuratorWatcher {
 
 		/**
 		 * Pending requests for module deployments to containers.

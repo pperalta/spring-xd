@@ -43,7 +43,6 @@ import org.springframework.xd.dirt.core.Job;
 import org.springframework.xd.dirt.core.JobDeploymentsPath;
 import org.springframework.xd.dirt.core.RequestedModulesPath;
 import org.springframework.xd.dirt.job.JobFactory;
-import org.springframework.xd.dirt.server.ModuleDeploymentWriter.ResultCollector;
 import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
 import org.springframework.xd.dirt.zookeeper.ChildPathIterator;
 import org.springframework.xd.dirt.zookeeper.Paths;
@@ -185,74 +184,76 @@ public class JobDeploymentListener implements PathChildrenCacheListener {
 	 * @throws InterruptedException
 	 */
 	private void deployJob(CuratorFramework client, final Job job) throws InterruptedException {
-		if (job != null) {
-			String statusPath = Paths.build(Paths.JOB_DEPLOYMENTS, job.getName(), Paths.STATUS);
-
-			DeploymentUnitStatus deployingStatus = null;
-			try {
-				deployingStatus = new DeploymentUnitStatus(ZooKeeperUtils.bytesToMap(
-						client.getData().forPath(statusPath)));
-			}
-			catch (Exception e) {
-				// an exception indicates that the status has not been set
-			}
-			Assert.state(deployingStatus != null
-					&& deployingStatus.getState() == DeploymentUnitStatus.State.deploying,
-					String.format("Expected 'deploying' status for job '%s'; current status: %s",
-							job.getName(), deployingStatus));
-
-			ModuleDeploymentPropertiesProvider provider = new JobModuleDeploymentPropertiesProvider(job);
-			List<ModuleDescriptor> descriptors = new ArrayList<ModuleDescriptor>();
-			descriptors.add(job.getJobModuleDescriptor());
-
-			try {
-				Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
-				for (ModuleDescriptor descriptor : job.getModuleDescriptors()) {
-					ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
-					Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
-							deploymentProperties,
-							containerRepository.findAll()));
-					ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
-					// Modules count == 0
-					if (deploymentProperties.getCount() == 0) {
-						String moduleSequence = String.valueOf(0);
-						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
-						for (Container container : matchedContainers) {
-							moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
-									descriptor, container, moduleSequence);
-						}
-					}
-					// Modules count > 0
-					else {
-						for (int i = 1; i <= deploymentProperties.getCount(); i++) {
-							String moduleSequence = String.valueOf(i);
-							createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
-							if (matchedContainers.size() > 0) {
-								moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
-										descriptor, matchedContainers.pop(), moduleSequence);
-							}
-						}
-					}
-					deploymentStatuses.addAll(moduleDeploymentWriter.processResults(client,
-							collector));
-
-					DeploymentUnitStatus status = stateCalculator.calculate(job, provider, deploymentStatuses);
-
-					logger.info("Deployment status for job '{}': {}", job.getName(), status);
-
-					client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
-				}
-			}
-			catch (NoContainerException e) {
-				logger.warn("No containers available for deployment of job {}", job.getName());
-			}
-			catch (InterruptedException e) {
-				throw e;
-			}
-			catch (Exception e) {
-				throw ZooKeeperUtils.wrapThrowable(e);
-			}
-		}
+		// todo: fix
+		throw new UnsupportedOperationException("fix");
+//		if (job != null) {
+//			String statusPath = Paths.build(Paths.JOB_DEPLOYMENTS, job.getName(), Paths.STATUS);
+//
+//			DeploymentUnitStatus deployingStatus = null;
+//			try {
+//				deployingStatus = new DeploymentUnitStatus(ZooKeeperUtils.bytesToMap(
+//						client.getData().forPath(statusPath)));
+//			}
+//			catch (Exception e) {
+//				// an exception indicates that the status has not been set
+//			}
+//			Assert.state(deployingStatus != null
+//					&& deployingStatus.getState() == DeploymentUnitStatus.State.deploying,
+//					String.format("Expected 'deploying' status for job '%s'; current status: %s",
+//							job.getName(), deployingStatus));
+//
+//			ModuleDeploymentPropertiesProvider provider = new JobModuleDeploymentPropertiesProvider(job);
+//			List<ModuleDescriptor> descriptors = new ArrayList<ModuleDescriptor>();
+//			descriptors.add(job.getJobModuleDescriptor());
+//
+//			try {
+//				Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
+//				for (ModuleDescriptor descriptor : job.getModuleDescriptors()) {
+//					ModuleDeploymentProperties deploymentProperties = provider.propertiesForDescriptor(descriptor);
+//					Deque<Container> matchedContainers = new ArrayDeque<Container>(containerMatcher.match(descriptor,
+//							deploymentProperties,
+//							containerRepository.findAll()));
+//					ResultCollector collector = moduleDeploymentWriter.new ResultCollector();
+//					// Modules count == 0
+//					if (deploymentProperties.getCount() == 0) {
+//						String moduleSequence = String.valueOf(0);
+//						createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+//						for (Container container : matchedContainers) {
+//							moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+//									descriptor, container, moduleSequence);
+//						}
+//					}
+//					// Modules count > 0
+//					else {
+//						for (int i = 1; i <= deploymentProperties.getCount(); i++) {
+//							String moduleSequence = String.valueOf(i);
+//							createRequestedModulesPath(client, descriptor, deploymentProperties, moduleSequence);
+//							if (matchedContainers.size() > 0) {
+//								moduleDeploymentWriter.writeModuleDeployment(client, collector, deploymentProperties,
+//										descriptor, matchedContainers.pop(), moduleSequence);
+//							}
+//						}
+//					}
+//					deploymentStatuses.addAll(moduleDeploymentWriter.processResults(client,
+//							collector));
+//
+//					DeploymentUnitStatus status = stateCalculator.calculate(job, provider, deploymentStatuses);
+//
+//					logger.info("Deployment status for job '{}': {}", job.getName(), status);
+//
+//					client.setData().forPath(statusPath, ZooKeeperUtils.mapToBytes(status.toMap()));
+//				}
+//			}
+//			catch (NoContainerException e) {
+//				logger.warn("No containers available for deployment of job {}", job.getName());
+//			}
+//			catch (InterruptedException e) {
+//				throw e;
+//			}
+//			catch (Exception e) {
+//				throw ZooKeeperUtils.wrapThrowable(e);
+//			}
+//		}
 	}
 
 	private void createRequestedModulesPath(CuratorFramework client, ModuleDescriptor descriptor,

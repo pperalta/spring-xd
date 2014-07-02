@@ -26,9 +26,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.integration.bus.BusProperties;
-import org.springframework.xd.dirt.server.StreamDeploymentListener.StreamModuleDeploymentPropertiesProvider;
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.ModuleDescriptor;
+import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 
 
 /**
@@ -37,7 +37,6 @@ import org.springframework.xd.module.ModuleDescriptor;
  * @author Ilayaperumal Gopinathan
  */
 public class StreamPartitionPropertiesProvider implements RuntimeDeploymentPropertiesProvider {
-
 
 	/**
 	 * Logger.
@@ -49,14 +48,7 @@ public class StreamPartitionPropertiesProvider implements RuntimeDeploymentPrope
 	 * has generated properties for. This is used to generate a unique
 	 * id for each module deployment per container for stream partitioning.
 	 */
-	private final Map<ModuleDescriptor.Key, Integer> mapModuleCount =
-			new HashMap<ModuleDescriptor.Key, Integer>();
-
-	/**
-	 * Cache of module deployment properties.
-	 */
-	private final Map<ModuleDescriptor.Key, ModuleDeploymentProperties> mapDeploymentProperties =
-			new HashMap<ModuleDescriptor.Key, ModuleDeploymentProperties>();
+	private final Map<ModuleDescriptor.Key, Integer> mapModuleCount = new HashMap<ModuleDescriptor.Key, Integer>();
 
 	/**
 	 * Stream to create module deployment properties for.
@@ -71,27 +63,32 @@ public class StreamPartitionPropertiesProvider implements RuntimeDeploymentPrope
 	 *
 	 * @param stream stream to create module properties for
 	 */
-	public StreamPartitionPropertiesProvider(Stream stream) {
+	public StreamPartitionPropertiesProvider(Stream stream, ModuleDeploymentPropertiesProvider propertiesProvider) {
 		this.stream = stream;
-		this.deploymentPropertiesProvider = new StreamModuleDeploymentPropertiesProvider(stream);
+		this.deploymentPropertiesProvider = propertiesProvider;
 	}
 
 	@Override
-	public ModuleDeploymentProperties runtimeProperties(ModuleDescriptor moduleDescriptor) {
+	public RuntimeModuleDeploymentProperties runtimeProperties(ModuleDescriptor moduleDescriptor) {
 		List<ModuleDescriptor> streamModules = stream.getModuleDescriptors();
-		ModuleDeploymentProperties properties = deploymentPropertiesProvider.propertiesForDescriptor(moduleDescriptor);
+		RuntimeModuleDeploymentProperties properties = new RuntimeModuleDeploymentProperties();
+		properties.putAll(deploymentPropertiesProvider.propertiesForDescriptor(moduleDescriptor));
+
+		ModuleDescriptor.Key moduleKey = moduleDescriptor.createKey();
+		Integer index = mapModuleCount.get(moduleKey);
+		if (index == null) {
+			index = 0;
+		}
+		mapModuleCount.put(moduleKey, index + 1);
+		// sequence number only applies if count > 0
+		properties.setSequence((properties.getCount() == 0) ? 0 : index);
+
 		int moduleIndex = moduleDescriptor.getIndex();
 		if (moduleIndex > 0) {
 			ModuleDescriptor previous = streamModules.get(moduleIndex - 1);
 			ModuleDeploymentProperties previousProperties = deploymentPropertiesProvider.propertiesForDescriptor(previous);
 			if (hasPartitionKeyProperty(previousProperties)) {
-				ModuleDescriptor.Key moduleKey = moduleDescriptor.createKey();
-				Integer index = mapModuleCount.get(moduleKey);
-				if (index == null) {
-					index = 0;
-				}
-				properties.put("consumer.partitionIndex", String.valueOf(index++));
-				mapModuleCount.put(moduleKey, index);
+				properties.put("consumer.partitionIndex", String.valueOf(index));
 			}
 		}
 		if (hasPartitionKeyProperty(properties)) {
@@ -138,7 +135,6 @@ public class StreamPartitionPropertiesProvider implements RuntimeDeploymentPrope
 				}
 			}
 		}
-		mapDeploymentProperties.put(moduleDescriptor.createKey(), properties);
 		return properties;
 	}
 

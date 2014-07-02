@@ -18,6 +18,7 @@ package org.springframework.xd.dirt.server;
 
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.ModuleDescriptor;
+import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 
 /**
  * Interface to obtain runtime {@link org.springframework.xd.module.ModuleDeploymentProperties}
@@ -33,5 +34,5 @@ public interface RuntimeDeploymentPropertiesProvider {
 	 * @param descriptor module descriptor for module to be deployed
 	 * @return deployment properties for module
 	 */
-	ModuleDeploymentProperties runtimeProperties(ModuleDescriptor descriptor);
+	RuntimeModuleDeploymentProperties runtimeProperties(ModuleDescriptor descriptor);
 }
