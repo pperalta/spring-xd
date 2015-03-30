@@ -33,12 +33,15 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.xd.dirt.core.DeploymentValidator;
 import org.springframework.xd.dirt.job.BatchJobAlreadyExistsException;
 import org.springframework.xd.dirt.plugins.job.DistributedJobLocator;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.Job;
 import org.springframework.xd.dirt.stream.JobDefinition;
+import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
+import org.springframework.xd.dirt.stream.JobRepository;
 import org.springframework.xd.rest.domain.JobDefinitionResource;
 
 /**
@@ -59,8 +62,10 @@ public class JobsController extends
 	private DistributedJobLocator distributedJobLocator;
 
 	@Autowired
-	public JobsController(JobDeployer jobDeployer) {
-		super(jobDeployer, new JobDefinitionResourceAssembler(), DeploymentUnitType.Job);
+	public JobsController(DeploymentValidator jobDeploymentValidator,
+			JobDefinitionRepository domainRepo, JobRepository instanceRepo) {
+		super(jobDeploymentValidator, domainRepo, instanceRepo,
+				new JobDefinitionResourceAssembler(),  DeploymentUnitType.Job);
 	}
 
 	@Override
@@ -114,8 +119,4 @@ public class JobsController extends
 		return cleanRabbitBus(job, adminUri, user, pw, vhost, busPrefix, true);
 	}
 
-	@Override
-	protected JobDefinition createDefinition(String name, String definition) {
-		return new JobDefinition(name, definition);
-	}
 }

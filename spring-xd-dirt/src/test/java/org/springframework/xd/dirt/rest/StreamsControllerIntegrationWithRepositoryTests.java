@@ -27,6 +27,8 @@ import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -110,32 +112,40 @@ public class StreamsControllerIntegrationWithRepositoryTests extends AbstractCon
 
 	}
 
+	private Logger logger = LoggerFactory.getLogger(this.getClass());
+
 	@Test
 	public void testCreateUndeployAndDeleteOfStream() throws Exception {
-		mockMvc.perform(
-				post("/streams/definitions").param("name", "mystream").param("definition", "time | log").param(
-						"deploy", "true")
-						.accept(MediaType.APPLICATION_JSON)).andExpect(status().isCreated());
+		logger.info("*** start testCreateUndeployAndDeleteOfStream");
+		try {
+			mockMvc.perform(
+					post("/streams/definitions").param("name", "mystream").param("definition", "time | log").param(
+							"deploy", "true")
+							.accept(MediaType.APPLICATION_JSON)).andExpect(status().isCreated());
 
-		StreamDefinition definition = streamDefinitionRepository.findOne("mystream");
-		assertNotNull(definition);
-		assertNotNull(streamRepository.findOne("mystream"));
+			StreamDefinition definition = streamDefinitionRepository.findOne("mystream");
+			assertNotNull(definition);
+			assertNotNull(streamRepository.findOne("mystream"));
 
-		mockMvc.perform(delete("/streams/deployments/mystream").accept(MediaType.APPLICATION_JSON)).andExpect(
-				status().isOk());
+			mockMvc.perform(delete("/streams/deployments/mystream").accept(MediaType.APPLICATION_JSON)).andExpect(
+					status().isOk());
 
-		StreamDefinition undeployedDefinition = streamDefinitionRepository.findOne("mystream");
-		assertNotNull(undeployedDefinition);
-		assertNull(streamRepository.findOne("mystream"));
+			StreamDefinition undeployedDefinition = streamDefinitionRepository.findOne("mystream");
+			assertNotNull(undeployedDefinition);
+			assertNull(streamRepository.findOne("mystream"));
 
-		mockMvc.perform(delete("/streams/definitions/mystream").accept(MediaType.APPLICATION_JSON)).andExpect(
-				status().isOk());
+			mockMvc.perform(delete("/streams/definitions/mystream").accept(MediaType.APPLICATION_JSON)).andExpect(
+					status().isOk());
 
-		assertNull(streamDefinitionRepository.findOne("mystream"));
-		assertNull(streamRepository.findOne("mystream"));
+			assertNull(streamDefinitionRepository.findOne("mystream"));
+			assertNull(streamRepository.findOne("mystream"));
 
-		mockMvc.perform(delete("/streams/definitions/mystream").accept(MediaType.APPLICATION_JSON)).andExpect(
-				status().isNotFound());
+			mockMvc.perform(delete("/streams/definitions/mystream").accept(MediaType.APPLICATION_JSON)).andExpect(
+					status().isNotFound());
+		}
+		finally {
+			logger.info("*** end testCreateUndeployAndDeleteOfStream");
+		}
 	}
 
 	@Test

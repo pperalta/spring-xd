@@ -94,14 +94,16 @@ public class ZooKeeperStreamRepository implements StreamRepository, Initializing
 
 	@Override
 	public <S extends Stream> S save(S entity) {
-		// stream instances are "saved" when a StreamDeploymentListener deploys a stream
-		return entity;
+		// Stream deployments are handled by DeploymentHandler;
+		// this should never be invoked
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
 	public <S extends Stream> Iterable<S> save(Iterable<S> entities) {
-		// stream instances are "saved" when a StreamDeploymentListener deploys a stream
-		return entities;
+		// Stream deployments are handled by DeploymentHandler;
+		// this should never be invoked
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
@@ -172,9 +174,15 @@ public class ZooKeeperStreamRepository implements StreamRepository, Initializing
 		}
 	}
 
+	/**
+	 * This method is deprecated but still invoked by functional tests for
+	 * cleaning up stream deployments; this will eventually throw
+	 * {@link UnsupportedOperationException}.
+	 */
 	@Override
+	@Deprecated
 	public void delete(String id) {
-		logger.info("Undeploying stream {}", id);
+		logger.warn("Undeploying stream {} via repository; this method is deprecated", id);
 
 		String streamDeploymentPath = Paths.build(Paths.STREAM_DEPLOYMENTS, id);
 		String streamModuleDeploymentPath = Paths.build(streamDeploymentPath, Paths.MODULES);

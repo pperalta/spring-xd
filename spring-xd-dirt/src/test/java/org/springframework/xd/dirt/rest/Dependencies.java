@@ -18,6 +18,8 @@ package org.springframework.xd.dirt.rest;
 
 import static org.mockito.Mockito.mock;
 
+import java.util.Map;
+
 import org.springframework.batch.admin.service.JdbcSearchableJobExecutionDao;
 import org.springframework.batch.admin.service.JdbcSearchableJobInstanceDao;
 import org.springframework.batch.admin.service.JdbcSearchableStepExecutionDao;
@@ -43,8 +45,11 @@ import org.springframework.xd.analytics.metrics.core.FieldValueCounterRepository
 import org.springframework.xd.analytics.metrics.core.GaugeRepository;
 import org.springframework.xd.analytics.metrics.core.RichGaugeRepository;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
+import org.springframework.xd.dirt.core.DefaultDeploymentValidator;
+import org.springframework.xd.dirt.core.DeploymentValidator;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.integration.bus.local.LocalMessageBus;
+import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleDefinitionService;
 import org.springframework.xd.dirt.module.ModuleDependencyRepository;
 import org.springframework.xd.dirt.module.WritableModuleRegistry;
@@ -52,14 +57,26 @@ import org.springframework.xd.dirt.module.store.ModuleMetadataRepository;
 import org.springframework.xd.dirt.module.store.ZooKeeperModuleDependencyRepository;
 import org.springframework.xd.dirt.plugins.job.DistributedJobLocator;
 import org.springframework.xd.dirt.plugins.job.DistributedJobService;
+import org.springframework.xd.dirt.server.admin.deployment.ContainerMatcher;
+import org.springframework.xd.dirt.server.admin.deployment.DefaultDeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessagePublisher;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentMessageConsumer;
+import org.springframework.xd.dirt.server.admin.deployment.zk.ModuleDeploymentWriter;
+import org.springframework.xd.dirt.server.admin.deployment.zk.ZKJobDeploymentHandler;
+import org.springframework.xd.dirt.server.admin.deployment.zk.ZKStreamDeploymentHandler;
+import org.springframework.xd.dirt.stream.AlreadyDeployedException;
+import org.springframework.xd.dirt.stream.DefinitionAlreadyExistsException;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
+import org.springframework.xd.dirt.stream.NoSuchDefinitionException;
+import org.springframework.xd.dirt.stream.NotDeployedException;
+import org.springframework.xd.dirt.stream.ParsingContext;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperJobDefinitionRepository;
@@ -153,8 +170,8 @@ public class Dependencies {
 
 	@Bean
 	public JobDeployer jobDeployer() {
-		return new JobDeployer(zooKeeperConnection(), jobDefinitionRepository(), xdJobRepository(), parser(),
-				messageBus(), deploymentHandler());
+		return new JobDeployer(zooKeeperConnection(), parser(), jobDeploymentValidator(),
+				jobDeploymentHandler(), messageBus());
 	}
 
 	@Bean
@@ -186,8 +203,8 @@ public class Dependencies {
 
 	@Bean
 	public StreamDeployer streamDeployer() {
-		return new StreamDeployer(zooKeeperConnection(), streamDefinitionRepository(), streamRepository(), parser(),
-				deploymentHandler());
+		return new StreamDeployer(zooKeeperConnection(), parser(),
+				streamDeploymentValidator(), streamDeploymentHandler());
 	}
 
 	@Bean
@@ -258,12 +275,15 @@ public class Dependencies {
 	@Bean
 	public DeploymentMessagePublisher DeploymentMessageProducer() {
 		return new DeploymentMessagePublisher() {
-
-			DeploymentMessageConsumer consumer = new DeploymentMessageConsumer();
 			@Override
 			public void publishDeploymentMessage(DeploymentMessage deploymentMessage) {
+				DeploymentMessageConsumer consumer = new DeploymentMessageConsumer(streamDeployer(),
+						jobDeployer(), streamDefinitionRepository(), jobDefinitionRepository());
 				try {
-					consumer.consumeMessage(deploymentMessage, streamDeployer(), jobDeployer());
+					consumer.consumeMessage(deploymentMessage);
+				}
+				catch (RuntimeException e) {
+					throw e;
 				}
 				catch (Exception e) {
 					throw new RuntimeException(e);
@@ -273,17 +293,50 @@ public class Dependencies {
 	}
 
 	@Bean
-	public DeploymentHandler deploymentHandler() {
-		return new DeploymentHandler() {
-			@Override
-			public void deploy(String deploymentUnitName) throws Exception {
-
-			}
-
-			@Override
-			public void undeploy(String deploymentUnitName) throws Exception {
-
-			}
-		};
+	public DeploymentValidator streamDeploymentValidator() {
+		return new DefaultDeploymentValidator(streamDefinitionRepository(), streamRepository(),
+				parser(), ParsingContext.stream);
 	}
+
+	@Bean
+	public DeploymentValidator jobDeploymentValidator() {
+		return new DefaultDeploymentValidator(jobDefinitionRepository(), xdJobRepository(),
+				parser(), ParsingContext.job);
+	}
+
+	@Bean
+	public StreamFactory streamFactory() {
+		return new StreamFactory(streamDefinitionRepository(), moduleRegistry(), moduleOptionsMetadataResolver());
+	}
+
+	@Bean
+	public DeploymentHandler streamDeploymentHandler() {
+		return new ZKStreamDeploymentHandler();
+	}
+
+	@Bean
+	public JobFactory jobFactory() {
+		return new JobFactory(jobDefinitionRepository(), moduleRegistry(), moduleOptionsMetadataResolver());
+	}
+
+	@Bean
+	public DeploymentHandler jobDeploymentHandler() {
+		return new ZKJobDeploymentHandler();
+	}
+
+	@Bean
+	public ContainerMatcher containerMatcher() {
+		return new ContainerMatcher();
+	}
+
+	@Bean
+	public ModuleDeploymentWriter moduleDeploymentWriter() {
+		return new ModuleDeploymentWriter();
+	}
+
+	@Bean
+	public DeploymentUnitStateCalculator deploymentUnitStateCalculator() {
+		return new DefaultDeploymentUnitStateCalculator();
+	}
+
 }

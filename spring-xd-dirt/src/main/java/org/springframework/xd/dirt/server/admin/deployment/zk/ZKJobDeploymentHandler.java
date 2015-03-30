@@ -34,6 +34,7 @@ import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.Job;
 import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.server.admin.deployment.ContainerMatcher;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentException;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.ModuleDeploymentPropertiesProvider;
 import org.springframework.xd.dirt.server.admin.deployment.ModuleDeploymentStatus;
@@ -88,16 +89,19 @@ public class ZKJobDeploymentHandler extends ZKDeploymentHandler {
 	@Autowired
 	private DeploymentUnitStateCalculator stateCalculator;
 
-	/**
-	 * Deploy the Job with the given name.
-	 *
-	 * @param jobName the job name
-	 * @throws Exception
-	 */
 	@Override
-	public void deploy(String jobName) throws Exception {
+	public void deploy(String jobName) throws DeploymentException {
 		CuratorFramework client = zkConnection.getClient();
-		deployJob(client, DeploymentLoader.loadJob(client, jobName, jobFactory));
+		try {
+			deployJob(client, DeploymentLoader.loadJob(client, jobName, jobFactory));
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new DeploymentException(String.format("Deployment of job '%s' was interrupted", jobName), e);
+		}
+		catch (Exception e) {
+			throw new DeploymentException(String.format("Exception while deploying job '%s'", jobName), e);
+		}
 	}
 
 	/**
@@ -188,5 +192,37 @@ public class ZKJobDeploymentHandler extends ZKDeploymentHandler {
 				throw ZooKeeperUtils.wrapThrowable(e);
 			}
 		}
+	}
+
+	@Override
+	public void undeploy(String id) throws DeploymentException {
+		CuratorFramework client = zkConnection.getClient();
+
+		try {
+			client.setData().forPath(
+					Paths.build(Paths.JOB_DEPLOYMENTS, id, Paths.STATUS),
+					ZooKeeperUtils.mapToBytes(new DeploymentUnitStatus(
+							DeploymentUnitStatus.State.undeploying).toMap()));
+		}
+		catch (Exception e) {
+			logger.warn("Exception while transitioning job '{}' state to {}", id,
+					DeploymentUnitStatus.State.undeploying, e);
+		}
+
+		try {
+			client.delete().deletingChildrenIfNeeded()
+					.forPath(Paths.build(Paths.JOB_DEPLOYMENTS, id));
+		}
+		catch (Exception e) {
+			//NoNodeException - nothing to delete
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+
+		super.undeploy(id);
+	}
+
+	@Override
+	protected String getDeploymentPath() {
+		return Paths.JOB_DEPLOYMENTS;
 	}
 }

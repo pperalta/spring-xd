@@ -45,7 +45,7 @@ import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
 
 /**
  * A Zookeeper backed repository for persisting {@link JobDefinition}s.
- * 
+ *
  * @author Mark Fisher
  * @author David Turanski
  */
@@ -182,6 +182,7 @@ public class ZooKeeperJobDefinitionRepository implements JobDefinitionRepository
 	@Override
 	public void delete(String id) {
 		try {
+			logger.trace("Deleting job definition {}", id);
 			zkConnection.getClient().delete().deletingChildrenIfNeeded().forPath(Paths.build(Paths.JOBS, id));
 		}
 		catch (Exception e) {

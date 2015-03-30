@@ -140,7 +140,7 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 		}
 		catch (Exception e) {
 			// NodeExistsException indicates that we tried to create the
-			// path just after another thread/jvm successfully created it 
+			// path just after another thread/jvm successfully created it
 			ZooKeeperUtils.wrapAndThrowIgnoring(e, NodeExistsException.class);
 		}
 		return entity;

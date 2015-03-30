@@ -16,22 +16,28 @@
 
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
+import static org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType.*;
+
 import java.util.Collections;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.queue.QueueConsumer;
 import org.apache.curator.framework.state.ConnectionState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentAction;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.JobDefinition;
+import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.store.DomainRepository;
 
 /**
  * Consumer for {@link org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage}
@@ -42,7 +48,7 @@ import org.springframework.xd.dirt.stream.StreamDeployer;
  */
 public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessage> {
 
-	private static final Log logger = LogFactory.getLog(DeploymentMessageConsumer.class);
+	private static final Logger logger = LoggerFactory.getLogger(DeploymentMessageConsumer.class);
 
 	@Autowired
 	private StreamDeployer streamDeployer;
@@ -50,57 +56,55 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	@Autowired
 	private JobDeployer jobDeployer;
 
-	// for testing only
-	public void consumeMessage(DeploymentMessage message, StreamDeployer streamDeployer, JobDeployer jobDeployer) throws Exception {
+	@Autowired
+	private StreamDefinitionRepository streamRepository;
+
+	@Autowired
+	private JobDefinitionRepository jobRepository;
+
+	public DeploymentMessageConsumer() {
+	}
+
+	public DeploymentMessageConsumer(StreamDeployer streamDeployer, JobDeployer jobDeployer,
+			StreamDefinitionRepository streamRepository, JobDefinitionRepository jobRepository) {
 		this.streamDeployer = streamDeployer;
 		this.jobDeployer = jobDeployer;
-		this.consumeMessage(message);
+		this.streamRepository = streamRepository;
+		this.jobRepository = jobRepository;
 	}
 
 	/**
 	 * Consume the deployment message and delegate to the deployer.
 	 *
-	 * @param deploymentMessage the deployment message
+	 * @param message the deployment message
 	 * @throws Exception
 	 */
 	@Override
-	public void consumeMessage(DeploymentMessage deploymentMessage) throws Exception {
-		switch (deploymentMessage.getDeploymentUnitType()) {
-			case Stream:
-				processDeploymentMessage(streamDeployer, deploymentMessage);
-				break;
-			case Job:
-				processDeploymentMessage(jobDeployer, deploymentMessage);
-				break;
-		}
-	}
+	public void consumeMessage(DeploymentMessage message) throws Exception {
+		DeploymentUnitType type = message.getDeploymentUnitType();
+		DeploymentAction action = message.getDeploymentAction();
+		DomainRepository<?, String> repository = type == Job ? jobRepository : streamRepository;
+		ResourceDeployer<?> deployer = type == Job ? jobDeployer : streamDeployer;
+		String name = message.getUnitName();
 
-	/**
-	 * Processes the deployment message based on the deployment action.
-	 *
-	 * @param deployer the deployer to use for processing
-	 * @param deploymentMessage the deployment message
-	 */
-	@SuppressWarnings({"rawtypes", "unchecked"})
-	private void processDeploymentMessage(ResourceDeployer deployer, DeploymentMessage deploymentMessage) {
-		DeploymentAction deploymentAction = deploymentMessage.getDeploymentAction();
-		String name = deploymentMessage.getUnitName();
-		switch (deploymentAction) {
+		switch (action) {
 			case create:
 			case createAndDeploy: {
-				if (deployer instanceof StreamDeployer) {
-					deployer.save(new StreamDefinition(name, deploymentMessage.getDefinition()));
+				switch (type) {
+					case Stream:
+						streamRepository.save(new StreamDefinition(name, message.getDefinition()));
+						break;
+					case Job:
+						jobRepository.save(new JobDefinition(name, message.getDefinition()));
+						break;
 				}
-				else if (deployer instanceof JobDeployer) {
-					deployer.save(new JobDefinition(name, deploymentMessage.getDefinition()));
-				}
-				if (DeploymentAction.createAndDeploy.equals(deploymentAction)) {
-					deployer.deploy(name, Collections.<String, String>emptyMap());
-				}
-				break;
 			}
+			if (DeploymentAction.createAndDeploy == action) {
+				deployer.deploy(name, Collections.<String, String>emptyMap());
+			}
+			break;
 			case deploy:
-				deployer.deploy(name, deploymentMessage.getDeploymentProperties());
+				deployer.deploy(name, message.getDeploymentProperties());
 				break;
 			case undeploy:
 				deployer.undeploy(name);
@@ -109,16 +113,18 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 				deployer.undeployAll();
 				break;
 			case destroy:
-				deployer.delete(name);
+				deployer.undeploy(name);
+				repository.delete(name);
 				break;
 			case destroyAll:
-				deployer.deleteAll();
+				deployer.undeployAll();
+				repository.deleteAll();
 				break;
 		}
 	}
 
 	@Override
 	public void stateChanged(CuratorFramework client, ConnectionState newState) {
-		logger.warn("Deployment Queue consumer state changed: " + newState);
+		logger.trace("Deployment Queue consumer state changed: " + newState);
 	}
 }

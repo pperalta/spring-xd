@@ -15,14 +15,19 @@
  */
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
+import java.util.List;
+
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
+import org.apache.zookeeper.KeeperException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.Assert;
 import org.springframework.xd.dirt.core.ModuleDeploymentRequestsPath;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentException;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
+import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
 import org.springframework.xd.module.ModuleDescriptor;
@@ -77,16 +82,38 @@ public abstract class ZKDeploymentHandler implements DeploymentHandler, Supervis
 	}
 
 	@Override
-	public final void undeploy(String deploymentUnitName) throws Exception {
+	public void undeploy(String deploymentUnitName) throws DeploymentException {
 		Assert.notNull(moduleDeploymentRequests, "Module deployment request path cache shouldn't be null.");
-		ModuleDeploymentRequestsPath path;
+
 		for (ChildData requestedModulesData : moduleDeploymentRequests.getCurrentData()) {
-			path = new ModuleDeploymentRequestsPath(requestedModulesData.getPath());
+			ModuleDeploymentRequestsPath path = new ModuleDeploymentRequestsPath(requestedModulesData.getPath());
 			if (path.getDeploymentUnitName().equals(deploymentUnitName)) {
-				zkConnection.getClient().delete().deletingChildrenIfNeeded().forPath(path.build());
+				try {
+					zkConnection.getClient().delete().deletingChildrenIfNeeded().forPath(path.build());
+				}
+				catch (Exception e) {
+					throw new DeploymentException(String.format("Exception while undeploying `%s`", deploymentUnitName), e);
+				}
 			}
 		}
 	}
+
+	@Override
+	public void undeployAll() {
+		try {
+			List<String> children = zkConnection.getClient().getChildren().forPath(getDeploymentPath());
+			for (String child : children) {
+				undeploy(child);
+			}
+		}
+		catch (Exception e) {
+			//NoNodeException - nothing to delete
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+	}
+
+	protected abstract String getDeploymentPath();
+
 
 	@Override
 	public void onSupervisorElected(SupervisorElectedEvent supervisorElectedEvent) {

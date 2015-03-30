@@ -30,6 +30,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -58,6 +60,8 @@ import org.springframework.xd.module.TestModuleDefinitions;
 @WebAppConfiguration
 @ContextConfiguration(classes = {RestConfiguration.class, Dependencies.class})
 public class JobsControllerIntegrationTests extends AbstractControllerIntegrationTest {
+
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
 	private static final String JOB_DEFINITION = "job --cron='*/10 * * * * *'";
 
@@ -168,7 +172,17 @@ public class JobsControllerIntegrationTests extends AbstractControllerIntegratio
 
 	@Test
 	public void testFailedJobDeletion() throws Exception {
-		mockMvc.perform(delete("/jobs/definitions/{name}", "job1")).andExpect(status().isNotFound());
+		logger.trace("start testFailedJobDeletion");
+		try {
+			mockMvc.perform(delete("/jobs/definitions/{name}", "job1")).andExpect(status().isNotFound());
+		}
+		catch (Throwable e) {
+			logger.error("testFailedJobDeletion", e);
+			throw e;
+		}
+		finally {
+			logger.trace("end testFailedJobDeletion");
+		}
 	}
 
 	@Test

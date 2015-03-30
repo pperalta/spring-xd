@@ -32,10 +32,13 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.xd.dirt.core.DeploymentValidator;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.Stream;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.rest.domain.StreamDefinitionResource;
 
 /**
@@ -55,8 +58,10 @@ public class StreamsController extends
 		XDController<StreamDefinition, StreamDefinitionResourceAssembler, StreamDefinitionResource, Stream> {
 
 	@Autowired
-	public StreamsController(StreamDeployer streamDeployer) {
-		super(streamDeployer, new StreamDefinitionResourceAssembler(), DeploymentUnitType.Stream);
+	public StreamsController(DeploymentValidator streamDeploymentValidator,
+			StreamDefinitionRepository domainRepo, StreamRepository instanceRepo) {
+		super(streamDeploymentValidator, domainRepo, instanceRepo,
+				new StreamDefinitionResourceAssembler(), DeploymentUnitType.Stream);
 	}
 
 	/**
@@ -68,11 +73,6 @@ public class StreamsController extends
 	public PagedResources<StreamDefinitionResource> list(Pageable pageable,
 			PagedResourcesAssembler<StreamDefinition> assembler) {
 		return listValues(pageable, assembler);
-	}
-
-	@Override
-	protected StreamDefinition createDefinition(String name, String definition) {
-		return new StreamDefinition(name, definition);
 	}
 
 	@ResponseBody

@@ -22,6 +22,7 @@ package org.springframework.xd.dirt.server.admin.deployment;
  * corresponding repositories.
  *
  * @author Ilayaperumal Gopinathan
+ * @author Patrick Peralta
  */
 public interface DeploymentHandler {
 
@@ -29,15 +30,20 @@ public interface DeploymentHandler {
 	 * Deploy the {@link org.springframework.xd.dirt.core.DeploymentUnit} with the given name.
 	 *
 	 * @param deploymentUnitName the deployment unit name
-	 * @throws Exception
+	 * @throws DeploymentException
 	 */
-	public void deploy(String deploymentUnitName) throws Exception;
+	void deploy(String deploymentUnitName) throws DeploymentException;
 
 	/**
 	 * Un-deploy the {@link org.springframework.xd.dirt.core.DeploymentUnit} with the given name.
 	 *
 	 * @param deploymentUnitName the deployment unit name
-	 * @throws Exception
+	 * @throws DeploymentException
 	 */
-	public void undeploy(String deploymentUnitName) throws Exception;
+	void undeploy(String deploymentUnitName) throws DeploymentException;
+
+	/**
+	 * Un-deploy all {@link org.springframework.xd.dirt.core.DeploymentUnit}s.
+	 */
+	void undeployAll();
 }

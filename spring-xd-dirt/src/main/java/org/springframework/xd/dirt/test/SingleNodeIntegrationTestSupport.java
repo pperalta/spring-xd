@@ -185,7 +185,8 @@ public class SingleNodeIntegrationTestSupport {
 	 * @return true if the operation succeeded.
 	 */
 	public final boolean createAndDeployStream(StreamDefinition definition) {
-		streamDeployer.save(definition);
+		streamDefinitionRepository.save(definition);
+		streamDeployer.deploy(definition.getName(), EMPTY_PROPERTIES);
 		return waitForDeploy(definition);
 	}
 
@@ -205,7 +206,7 @@ public class SingleNodeIntegrationTestSupport {
 	 */
 	public final boolean undeployAndDestroyStream(StreamDefinition definition) {
 		boolean result = waitForUndeploy(definition);
-		streamDeployer.delete(definition.getName());
+		streamDefinitionRepository.delete(definition.getName());
 		return result;
 	}
 
@@ -214,7 +215,7 @@ public class SingleNodeIntegrationTestSupport {
 	 * @param name  the stream name
 	 */
 	public final void deleteStream(String name) {
-		streamDeployer.delete(name);
+		streamDefinitionRepository.delete(name);
 	}
 
 	/**
@@ -294,12 +295,7 @@ public class SingleNodeIntegrationTestSupport {
 
 	private boolean waitForDeploy(StreamDefinition definition, Map<String, String> properties) {
 		streamDeployer.deploy(definition.getName(), properties);
-		State state = streamStateVerifier().waitForDeploy(definition.getName());
-		if (state.equals(State.deployed)) {
-			return true;
-		}
-		return false;
-
+		return streamStateVerifier().waitForDeploy(definition.getName()) == State.deployed;
 	}
 
 	private boolean waitForDeploy(StreamDefinition definition, Map<String, String> properties, boolean allowIncomplete) {

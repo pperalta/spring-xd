@@ -15,12 +15,18 @@
  */
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +37,9 @@ import org.springframework.xd.dirt.cluster.NoContainerException;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.Stream;
+import org.springframework.xd.dirt.core.StreamDeploymentsPath;
 import org.springframework.xd.dirt.server.admin.deployment.ContainerMatcher;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentException;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.ModuleDeploymentStatus;
 import org.springframework.xd.dirt.server.admin.deployment.StreamRuntimePropertiesProvider;
@@ -86,14 +94,18 @@ public class ZKStreamDeploymentHandler extends ZKDeploymentHandler {
 	private DeploymentUnitStateCalculator stateCalculator;
 
 
-	/**
-	 * Deploy the stream with the given name.
-	 * @param streamName the stream name
-	 * @throws Exception
-	 */
-	public void deploy(String streamName) throws Exception {
+	public void deploy(String streamName) throws DeploymentException {
 		CuratorFramework client = zkConnection.getClient();
-		deployStream(client, DeploymentLoader.loadStream(client, streamName, streamFactory));
+		try {
+			deployStream(client, DeploymentLoader.loadStream(client, streamName, streamFactory));
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new DeploymentException(String.format("Deployment of stream '%s' was interrupted", streamName), e);
+		}
+		catch (Exception e) {
+			throw new DeploymentException(String.format("Exception while deploying stream '%s'", streamName), e);
+		}
 	}
 
 	/**
@@ -189,5 +201,95 @@ public class ZKStreamDeploymentHandler extends ZKDeploymentHandler {
 		catch (Exception e) {
 			throw ZooKeeperUtils.wrapThrowable(e);
 		}
+	}
+
+	@Override
+	public void undeploy(String id) throws DeploymentException {
+		logger.info("Undeploying stream {}", id);
+
+		String streamDeploymentPath = Paths.build(Paths.STREAM_DEPLOYMENTS, id);
+		String streamModuleDeploymentPath = Paths.build(streamDeploymentPath, Paths.MODULES);
+		CuratorFramework client = zkConnection.getClient();
+		Deque<String> paths = new ArrayDeque<String>();
+
+		try {
+			client.setData().forPath(
+					Paths.build(Paths.STREAM_DEPLOYMENTS, id, Paths.STATUS),
+					ZooKeeperUtils.mapToBytes(new DeploymentUnitStatus(
+							DeploymentUnitStatus.State.undeploying).toMap()));
+		}
+		catch (Exception e) {
+			logger.warn("Exception while transitioning stream {} state to {}", id,
+					DeploymentUnitStatus.State.undeploying, e);
+		}
+
+		// Place all module deployments into a tree keyed by the
+		// ZK transaction id. The ZK transaction id maintains
+		// total ordering of all changes. This allows the
+		// undeployment of modules in the reverse order in
+		// which they were deployed.
+
+		/*
+		 * TODO: ordering by TX id is not a reliable means to determine
+		 * the order in which modules should be undeployed because
+		 * a source module may be redeployed during the lifetime
+		 * of the stream. Instead we should re-load the stream
+		 * and determine the correct module ordering.
+		 */
+
+		Map<Long, String> txMap = new TreeMap<Long, String>();
+		try {
+			List<String> deployments = client.getChildren().forPath(streamModuleDeploymentPath);
+			for (String deployment : deployments) {
+				String path = new StreamDeploymentsPath(Paths.build(streamModuleDeploymentPath, deployment)).build();
+				Stat stat = client.checkExists().forPath(path);
+				Assert.notNull(stat);
+				txMap.put(stat.getCzxid(), path);
+			}
+		}
+		catch (Exception e) {
+			//NoNodeException - nothing to delete
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+
+		for (String deployment : txMap.values()) {
+			paths.add(deployment);
+		}
+
+		for (Iterator<String> iterator = paths.descendingIterator(); iterator.hasNext();) {
+			try {
+				String path = iterator.next();
+				logger.trace("removing path {}", path);
+				client.delete().deletingChildrenIfNeeded().forPath(path);
+			}
+			catch (Exception e) {
+				ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+			}
+		}
+
+		try {
+			client.delete().deletingChildrenIfNeeded().forPath(streamDeploymentPath);
+		}
+		catch (KeeperException.NotEmptyException e) {
+			List<String> children = new ArrayList<String>();
+			try {
+				children.addAll(client.getChildren().forPath(streamModuleDeploymentPath));
+			}
+			catch (Exception ex) {
+				children.add("Could not load list of children due to " + ex);
+			}
+			throw new IllegalStateException(String.format(
+					"The following children were not deleted from %s: %s", streamModuleDeploymentPath, children), e);
+		}
+		catch (Exception e) {
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+
+		super.undeploy(id);
+	}
+
+	@Override
+	protected String getDeploymentPath() {
+		return Paths.STREAM_DEPLOYMENTS;
 	}
 }

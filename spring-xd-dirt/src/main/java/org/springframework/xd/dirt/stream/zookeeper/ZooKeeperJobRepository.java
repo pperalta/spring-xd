@@ -88,14 +88,16 @@ public class ZooKeeperJobRepository implements JobRepository, InitializingBean {
 
 	@Override
 	public <S extends Job> S save(S entity) {
-		// job instances are "saved" when a JobDeploymentListener deploys a job
-		return entity;
+		// Job deployments are handled by DeploymentHandler;
+		// this should never be invoked
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
 	public <S extends Job> Iterable<S> save(Iterable<S> entities) {
-		// job instances are "saved" when a JobDeploymentListener deploys a job
-		return entities;
+		// Job deployments are handled by DeploymentHandler;
+		// this should never be invoked
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
@@ -166,8 +168,15 @@ public class ZooKeeperJobRepository implements JobRepository, InitializingBean {
 		}
 	}
 
+	/**
+	 * This method is deprecated but still invoked by functional tests for
+	 * cleaning up job deployments; this will eventually throw
+	 * {@link UnsupportedOperationException}.
+	 */
 	@Override
+	@Deprecated
 	public void delete(String id) {
+		logger.warn("Undeploying job {} via repository; this method is deprecated", id);
 		CuratorFramework client = zkConnection.getClient();
 
 		try {
