@@ -16,7 +16,7 @@
 
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
-import static org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType.*;
+import static org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType.Job;
 
 import java.util.Collections;
 
@@ -34,6 +34,7 @@ import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.JobDefinition;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
+import org.springframework.xd.dirt.stream.NotDeployedException;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
@@ -57,20 +58,20 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	private JobDeployer jobDeployer;
 
 	@Autowired
-	private StreamDefinitionRepository streamRepository;
+	private StreamDefinitionRepository streamDefinitionRepository;
 
 	@Autowired
-	private JobDefinitionRepository jobRepository;
+	private JobDefinitionRepository jobDefinitionRepository;
 
 	public DeploymentMessageConsumer() {
 	}
 
 	public DeploymentMessageConsumer(StreamDeployer streamDeployer, JobDeployer jobDeployer,
-			StreamDefinitionRepository streamRepository, JobDefinitionRepository jobRepository) {
+			StreamDefinitionRepository streamDefinitionRepository, JobDefinitionRepository jobDefinitionRepository) {
 		this.streamDeployer = streamDeployer;
 		this.jobDeployer = jobDeployer;
-		this.streamRepository = streamRepository;
-		this.jobRepository = jobRepository;
+		this.streamDefinitionRepository = streamDefinitionRepository;
+		this.jobDefinitionRepository = jobDefinitionRepository;
 	}
 
 	/**
@@ -83,7 +84,7 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	public void consumeMessage(DeploymentMessage message) throws Exception {
 		DeploymentUnitType type = message.getDeploymentUnitType();
 		DeploymentAction action = message.getDeploymentAction();
-		DomainRepository<?, String> repository = type == Job ? jobRepository : streamRepository;
+		DomainRepository<?, String> definitionRepository = type == Job ? jobDefinitionRepository : streamDefinitionRepository;
 		ResourceDeployer<?> deployer = type == Job ? jobDeployer : streamDeployer;
 		String name = message.getUnitName();
 
@@ -92,10 +93,10 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 			case createAndDeploy: {
 				switch (type) {
 					case Stream:
-						streamRepository.save(new StreamDefinition(name, message.getDefinition()));
+						streamDefinitionRepository.save(new StreamDefinition(name, message.getDefinition()));
 						break;
 					case Job:
-						jobRepository.save(new JobDefinition(name, message.getDefinition()));
+						jobDefinitionRepository.save(new JobDefinition(name, message.getDefinition()));
 						break;
 				}
 			}
@@ -113,12 +114,17 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 				deployer.undeployAll();
 				break;
 			case destroy:
-				deployer.undeploy(name);
-				repository.delete(name);
+				try {
+					deployer.undeploy(name);
+				}
+				catch (NotDeployedException e) {
+					// ignore
+				}
+				definitionRepository.delete(name);
 				break;
 			case destroyAll:
 				deployer.undeployAll();
-				repository.deleteAll();
+				definitionRepository.deleteAll();
 				break;
 		}
 	}

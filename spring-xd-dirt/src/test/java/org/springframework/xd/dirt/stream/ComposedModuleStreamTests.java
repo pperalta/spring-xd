@@ -72,6 +72,7 @@ public class ComposedModuleStreamTests extends StreamTestSupport {
 	}
 
 	@Test
+	//TODO: this test is failing as there seems to be a bug with the functionality being tested at line:99
 	public void testDeleteCompositeSource() {
 		deployStream("aCompositeStream", "compositesource | sink");
 		ModuleDefinitionService moduleDefinitionService = getAdminContext().getBean(

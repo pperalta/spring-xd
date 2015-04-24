@@ -186,7 +186,6 @@ public class SingleNodeIntegrationTestSupport {
 	 */
 	public final boolean createAndDeployStream(StreamDefinition definition) {
 		streamDefinitionRepository.save(definition);
-		streamDeployer.deploy(definition.getName(), EMPTY_PROPERTIES);
 		return waitForDeploy(definition);
 	}
 

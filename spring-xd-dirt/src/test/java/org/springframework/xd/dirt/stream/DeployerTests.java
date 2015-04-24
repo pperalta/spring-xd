@@ -30,7 +30,6 @@ import org.junit.rules.ExpectedException;
 
 import org.springframework.xd.dirt.server.SingleNodeApplication;
 import org.springframework.xd.dirt.server.TestApplicationBootstrap;
-import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.test.SingleNodeIntegrationTestSupport;
 
 
@@ -63,7 +62,7 @@ public class DeployerTests {
 
 	@After
 	public void cleanStreams() {
-		integrationSupport.streamDefinitionRepository().deleteAll();
+		integrationSupport.deleteStream("foo");
 	}
 
 	@Test
@@ -73,6 +72,7 @@ public class DeployerTests {
 
 		Map<String, String> properties = Collections.singletonMap("module.log.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 	@Test
@@ -82,6 +82,7 @@ public class DeployerTests {
 
 		Map<String, String> properties = Collections.singletonMap("module.bar.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 	@Test
@@ -94,6 +95,7 @@ public class DeployerTests {
 
 		Map<String, String> properties = Collections.singletonMap("module.logo.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 	@Test
@@ -106,6 +108,7 @@ public class DeployerTests {
 
 		Map<String, String> properties = Collections.singletonMap("module.log.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 
