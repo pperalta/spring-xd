@@ -248,14 +248,14 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 
 	@Test
 	public final void testRoutingWithSpel() throws InterruptedException {
-		final StreamDefinition routerDefinition = new StreamDefinition("routerDefinition",
+		final StreamDefinition routerDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("routerDefinition",
 				QUEUE_ROUTE + " > router --expression=payload.contains('a')?'" + QUEUE_FOO + "':'" + QUEUE_BAR + "'");
 		doTest(routerDefinition);
 	}
 
 	@Test
 	public final void testRoutingWithGroovy() throws InterruptedException {
-		StreamDefinition routerDefinition = new StreamDefinition("routerDefinition",
+		StreamDefinition routerDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("routerDefinition",
 				QUEUE_ROUTE + " > router --script='org/springframework/xd/dirt/stream/router.groovy'");
 		doTest(routerDefinition);
 	}
@@ -263,11 +263,11 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 	@Test
 	public void testBasicTap() {
 
-		StreamDefinition streamDefinition = new StreamDefinition(
+		StreamDefinition streamDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition(
 				"mystream",
 				"queue:source >  transform --expression=payload.toUpperCase() > queue:sink"
 				);
-		StreamDefinition tapDefinition = new StreamDefinition("mytap",
+		StreamDefinition tapDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("mytap",
 				"tap:stream:mystream > transform --expression=payload.replaceAll('A','.') > queue:tap");
 		tapTest(streamDefinition, tapDefinition);
 	}
@@ -275,12 +275,12 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 	@Test
 	public void testTappingWithLabels() {
 
-		StreamDefinition streamDefinition = new StreamDefinition(
+		StreamDefinition streamDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition(
 				"streamWithLabels",
 				"queue:source > flibble: transform --expression=payload.toUpperCase() > queue:sink"
 				);
 
-		StreamDefinition tapDefinition = new StreamDefinition("tapWithLabels",
+		StreamDefinition tapDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("tapWithLabels",
 				"tap:stream:streamWithLabels.flibble > transform --expression=payload.replaceAll('A','.') > queue:tap");
 		tapTest(streamDefinition, tapDefinition);
 	}
@@ -289,12 +289,12 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 	@Test
 	public void testTappingWithRepeatedModulesDoesNotDuplicateMessages() {
 
-		StreamDefinition streamDefinition = new StreamDefinition(
+		StreamDefinition streamDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition(
 				"streamWithMultipleTransformers",
 				"queue:source > flibble: transform --expression=payload.toUpperCase() | transform --expression=payload.toUpperCase() > queue:sink"
 				);
 
-		StreamDefinition tapDefinition = new StreamDefinition("tapWithLabels",
+		StreamDefinition tapDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("tapWithLabels",
 				"tap:stream:streamWithMultipleTransformers.flibble > transform --expression=payload.replaceAll('A','.') > queue:tap");
 		tapTest(streamDefinition, tapDefinition);
 	}
@@ -302,9 +302,9 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 	@Test
 	public final void testTopicChannel() throws InterruptedException {
 
-		StreamDefinition bar1Definition = new StreamDefinition("bar1Definition",
+		StreamDefinition bar1Definition = integrationSupport.streamDefinitionFactory().createStreamDefinition("bar1Definition",
 				"topic:foo > queue:bar1");
-		StreamDefinition bar2Definition = new StreamDefinition("bar2Definition",
+		StreamDefinition bar2Definition = integrationSupport.streamDefinitionFactory().createStreamDefinition("bar2Definition",
 				"topic:foo > queue:bar2");
 		assertEquals(0, integrationSupport.streamRepository().count());
 		integrationSupport.streamDefinitionRepository().save(bar1Definition);
@@ -352,7 +352,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 		int i;
 		for (i = 0; i < iterations; i++) {
 			String streamName = "test" + i;
-			StreamDefinition definition = new StreamDefinition(streamName,
+			StreamDefinition definition = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName,
 					"http --port=" + SocketUtils.findAvailableServerSocket()
 							+ "| transform --expression=payload | filter --expression=true | log");
 			integrationSupport.streamDefinitionRepository().save(definition);
@@ -383,13 +383,13 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 
 	@Test
 	public void moduleChannelsRegisteredWithMessageBus() throws InterruptedException {
-		StreamDefinition sd = new StreamDefinition("busTest", getHttpLogStream());
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition("busTest", getHttpLogStream());
 		int originalBindings = getMessageBusBindingCount();
 		assertTrue("Timeout waiting for stream deployment", integrationSupport.createAndDeployStream(sd));
 		int newBindings = getMessageBusBindingCount() - originalBindings;
 		assertEquals(2, newBindings);
 
-		StreamDefinition tapStream = new StreamDefinition("busTestTap", "tap:stream:busTest > log");
+		StreamDefinition tapStream = integrationSupport.streamDefinitionFactory().createStreamDefinition("busTestTap", "tap:stream:busTest > log");
 		assertTrue("Timeout waiting for stream deployment", integrationSupport.createAndDeployStream(tapStream));
 		int afterTapBindings = getMessageBusBindingCount() - originalBindings;
 		assertEquals(4, afterTapBindings);
@@ -402,7 +402,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 	@Test
 	public void moduleDeploymentPropertiesForModuleName() throws InterruptedException {
 		String streamName = "moduleDeploymentPropertiesForModuleName";
-		StreamDefinition definition = new StreamDefinition(streamName, getHttpLogStream());
+		StreamDefinition definition = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, getHttpLogStream());
 		integrationSupport.streamDefinitionRepository().save(definition);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.log.prop1", "0");
@@ -421,7 +421,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 		String streamName = "moduleDeploymentPropertiesForModuleLabel";
 		String dsl = String.format("http --port=%s | t1: transform | t2: transform | log",
 				SocketUtils.findAvailableServerSocket());
-		StreamDefinition definition = new StreamDefinition(streamName, dsl);
+		StreamDefinition definition = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, dsl);
 		integrationSupport.streamDefinitionRepository().save(definition);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.t1.prop1", "0");
@@ -442,7 +442,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 
 	@Test
 	public void verifyQueueChannelsRegisteredOnDemand() throws InterruptedException {
-		final StreamDefinition routerDefinition = new StreamDefinition("routerDefinition",
+		final StreamDefinition routerDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("routerDefinition",
 				"queue:x > router --expression=payload.contains('y')?'queue:y':'queue:z'");
 		integrationSupport.streamDefinitionRepository().save(routerDefinition);
 		integrationSupport.deployStream(routerDefinition, onDemandProperties());
@@ -518,7 +518,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 
 	@Test
 	public void verifyTopicChannelsRegisteredOnDemand() throws InterruptedException {
-		final StreamDefinition routerDefinition = new StreamDefinition("routerDefinition",
+		final StreamDefinition routerDefinition = integrationSupport.streamDefinitionFactory().createStreamDefinition("routerDefinition",
 				"topic:x > router --expression=payload.contains('y')?'topic:y':'topic:z'");
 		integrationSupport.streamDefinitionRepository().save(routerDefinition);
 		integrationSupport.deployStream(routerDefinition, onDemandProperties());

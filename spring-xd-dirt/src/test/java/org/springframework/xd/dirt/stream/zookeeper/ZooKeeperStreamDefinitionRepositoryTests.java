@@ -33,15 +33,22 @@ import org.junit.Test;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.xd.dirt.module.ModuleRegistry;
+import org.springframework.xd.dirt.module.ResourceModuleRegistry;
+import org.springframework.xd.dirt.module.store.ZooKeeperComposedModuleDefinitionRegistry;
 import org.springframework.xd.dirt.module.store.ZooKeeperModuleDependencyRepository;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
+import org.springframework.xd.dirt.stream.XDParser;
+import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperStreamDefinitionRepository;
 import org.springframework.xd.dirt.zookeeper.EmbeddedZooKeeper;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
+import org.springframework.xd.module.options.DefaultModuleOptionsMetadataResolver;
 
 /**
  * Unit tests for {@link ZooKeeperStreamDefinitionRepository}.
- * 
+ *
  * @author Eric Bottard
  * @author David Turanski
  * @author Gary Russell
@@ -55,6 +62,8 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	private static ZooKeeperConnection zkConnection;
 
+	private StreamDefinitionFactory streamDefinitionFactory;
+
 	@BeforeClass
 	public static void initZooKeeper() {
 		embeddedZooKeeper.start();
@@ -65,9 +74,14 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Before
 	public void createRepository() throws Exception {
+		ModuleRegistry moduleRegistry = new ResourceModuleRegistry("file:../modules");
+		XDParser parser = new XDStreamParser(moduleRegistry, new DefaultModuleOptionsMetadataResolver());
+		this.streamDefinitionFactory = new StreamDefinitionFactory(parser);
+
 		this.repository = new ZooKeeperStreamDefinitionRepository(zkConnection,
 				new ZooKeeperModuleDependencyRepository(zkConnection));
 		repository.afterPropertiesSet();
+
 		for (int i = 0; !zkConnection.isConnected() && i < 100; i++) {
 			Thread.sleep(100);
 		}
@@ -97,7 +111,7 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void simpleAdding() {
-		StreamDefinition stream = new StreamDefinition("some", "http | hdfs");
+		StreamDefinition stream = this.streamDefinitionFactory.createStreamDefinition("some", "http | hdfs");
 		repository.save(stream);
 
 		Assert.assertTrue(repository.exists("some"));
@@ -110,8 +124,8 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void multipleAdding() {
-		StreamDefinition one = new StreamDefinition("one", "http | hdfs");
-		StreamDefinition two = new StreamDefinition("two", "tcp | file");
+		StreamDefinition one = this.streamDefinitionFactory.createStreamDefinition("one", "http | hdfs");
+		StreamDefinition two = this.streamDefinitionFactory.createStreamDefinition("two", "tcp | file");
 		repository.save(Arrays.asList(one, two));
 
 		Assert.assertTrue(repository.exists("one"));
@@ -120,7 +134,7 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void multipleFinding() {
-		StreamDefinition one = new StreamDefinition("one", "http | hdfs");
+		StreamDefinition one = this.streamDefinitionFactory.createStreamDefinition("one", "http | hdfs");
 		repository.save(one);
 
 		Iterator<StreamDefinition> iterator = repository.findAll(Arrays.asList("one", "notthere")).iterator();
@@ -130,8 +144,8 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void deleteSimple() {
-		StreamDefinition one = new StreamDefinition("one", "http | hdfs");
-		StreamDefinition two = new StreamDefinition("two", "tcp | file");
+		StreamDefinition one = this.streamDefinitionFactory.createStreamDefinition("one", "http | hdfs");
+		StreamDefinition two = this.streamDefinitionFactory.createStreamDefinition("two", "tcp | file");
 		repository.save(Arrays.asList(one, two));
 
 		repository.delete("one");
@@ -143,9 +157,9 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void deleteMultiple() {
-		StreamDefinition one = new StreamDefinition("one", "http | hdfs");
-		StreamDefinition two = new StreamDefinition("two", "tcp | file");
-		StreamDefinition three = new StreamDefinition("three", "http | file");
+		StreamDefinition one = this.streamDefinitionFactory.createStreamDefinition("one", "http | hdfs");
+		StreamDefinition two = this.streamDefinitionFactory.createStreamDefinition("two", "tcp | file");
+		StreamDefinition three = this.streamDefinitionFactory.createStreamDefinition("three", "http | file");
 		repository.save(Arrays.asList(one, two, three));
 
 		repository.delete(Arrays.asList(one));
@@ -158,11 +172,11 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void override() {
-		StreamDefinition one = new StreamDefinition("one", "http | hdfs");
+		StreamDefinition one = this.streamDefinitionFactory.createStreamDefinition("one", "http | hdfs");
 		repository.save(one);
 		Assert.assertEquals("http | hdfs", repository.findOne("one").getDefinition());
 
-		StreamDefinition otherone = new StreamDefinition("one", "time | file");
+		StreamDefinition otherone = this.streamDefinitionFactory.createStreamDefinition("one", "time | file");
 		repository.save(otherone);
 		Assert.assertEquals(1, repository.count());
 		Assert.assertEquals("time | file", repository.findOne("one").getDefinition());
@@ -175,7 +189,7 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void testSave() {
-		StreamDefinition streamDefinition = new StreamDefinition("test", "time | log");
+		StreamDefinition streamDefinition = this.streamDefinitionFactory.createStreamDefinition("test", "time | log");
 		repository.save(streamDefinition);
 		StreamDefinition saved = repository.findOne("test");
 		assertEquals(streamDefinition.getName(), saved.getName());
@@ -184,9 +198,9 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void testFindAll() {
-		repository.save(new StreamDefinition("test1", "time | log"));
-		repository.save(new StreamDefinition("test2", "time | log"));
-		repository.save(new StreamDefinition("test3", "time | log"));
+		repository.save(this.streamDefinitionFactory.createStreamDefinition("test1", "time | log"));
+		repository.save(this.streamDefinitionFactory.createStreamDefinition("test2", "time | log"));
+		repository.save(this.streamDefinitionFactory.createStreamDefinition("test3", "time | log"));
 		int i = 0;
 		for (Iterator<StreamDefinition> it = repository.findAll().iterator(); it.hasNext();) {
 			it.next();
@@ -201,7 +215,7 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void testDelete() {
-		StreamDefinition streamDefinition = new StreamDefinition("test", "time | log");
+		StreamDefinition streamDefinition = this.streamDefinitionFactory.createStreamDefinition("test", "time | log");
 		repository.save(streamDefinition);
 		StreamDefinition saved = repository.findOne("test");
 		repository.delete(saved);
@@ -210,11 +224,11 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 
 	@Test
 	public void sorting() {
-		StreamDefinition one = new StreamDefinition("one", "http | hdfs");
-		StreamDefinition two = new StreamDefinition("two", "tcp | file");
-		StreamDefinition three = new StreamDefinition("three", "http | file");
-		StreamDefinition four = new StreamDefinition("four", "http | file");
-		StreamDefinition five = new StreamDefinition("five", "http | file");
+		StreamDefinition one = this.streamDefinitionFactory.createStreamDefinition("one", "http | hdfs");
+		StreamDefinition two = this.streamDefinitionFactory.createStreamDefinition("two", "tcp | file");
+		StreamDefinition three = this.streamDefinitionFactory.createStreamDefinition("three", "http | file");
+		StreamDefinition four = this.streamDefinitionFactory.createStreamDefinition("four", "http | file");
+		StreamDefinition five = this.streamDefinitionFactory.createStreamDefinition("five", "http | file");
 		repository.save(Arrays.asList(one, two, three, four, five));
 
 		Assert.assertEquals(5, repository.count());

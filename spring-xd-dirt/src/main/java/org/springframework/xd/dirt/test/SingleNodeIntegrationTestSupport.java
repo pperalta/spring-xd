@@ -31,6 +31,7 @@ import org.springframework.xd.dirt.server.SingleNodeApplication;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobRepository;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamRepository;
@@ -77,6 +78,8 @@ public class SingleNodeIntegrationTestSupport {
 
 	private final Map<String, PathChildrenCache> mapChildren = new HashMap<String, PathChildrenCache>();
 
+	private final StreamDefinitionFactory streamDefinitionFactory;
+
 
 	/**
 	 * Constructor useful for testing custom modules
@@ -96,6 +99,7 @@ public class SingleNodeIntegrationTestSupport {
 		messageBus = application.pluginContext().getBean(MessageBusSupport.class);
 		zooKeeperConnection = application.adminContext().getBean(ZooKeeperConnection.class);
 		moduleDeployer = application.containerContext().getBean(ModuleDeployer.class);
+		streamDefinitionFactory = application.adminContext().getBean(StreamDefinitionFactory.class);
 	}
 
 	public final void addModuleRegistry(ModuleRegistry moduleRegistry) {
@@ -122,6 +126,10 @@ public class SingleNodeIntegrationTestSupport {
 
 	public final StreamRepository streamRepository() {
 		return streamRepository;
+	}
+
+	public final StreamDefinitionFactory streamDefinitionFactory() {
+		return streamDefinitionFactory;
 	}
 
 	public final ResourceStateVerifier streamStateVerifier() {

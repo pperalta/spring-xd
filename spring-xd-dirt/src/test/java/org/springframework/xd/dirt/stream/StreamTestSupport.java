@@ -64,7 +64,7 @@ public class StreamTestSupport {
 	}
 
 	protected static boolean deployStream(String name, String config) {
-		return integrationTestSupport.createAndDeployStream(new StreamDefinition(name, config));
+		return integrationTestSupport.createAndDeployStream(integrationTestSupport.streamDefinitionFactory().createStreamDefinition(name, config));
 	}
 
 	protected static void undeployStream(String name) {

@@ -35,6 +35,7 @@ import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.JobRepository;
 import org.springframework.xd.dirt.stream.ParsingContext;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
 import org.springframework.xd.dirt.stream.StreamDefinitionMigrator;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
@@ -179,6 +180,11 @@ public class DeploymentConfiguration {
 	@Bean
 	public AdminRepository adminRepository() {
 		return new ZooKeeperAdminRepository(zkConnection);
+	}
+
+	@Bean
+	public StreamDefinitionFactory streamDefinitionFactory() {
+		return new StreamDefinitionFactory(parser());
 	}
 
 }

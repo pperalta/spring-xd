@@ -30,7 +30,7 @@ import org.springframework.xd.dirt.test.source.SingleNodeNamedQueueSource;
 
 /**
  * A helper class for building single node streams that use a {@link NamedChannelSource} and {@link NamedChannelSink}.
- * 
+ *
  * @author David Turanski
  */
 public abstract class AbstractSingleNodeProcessingChain {
@@ -64,7 +64,8 @@ public abstract class AbstractSingleNodeProcessingChain {
 		this.integrationSupport = new SingleNodeIntegrationTestSupport(application);
 		this.integrationSupport.addModuleRegistry(new ResourceModuleRegistry(moduleResourceLocation));
 		String streamDefinition = buildStreamDefinition(processingChain);
-		stream = new StreamDefinition(streamName, streamDefinition);
+		stream = this.integrationSupport.streamDefinitionFactory()
+				.createStreamDefinition(streamName, streamDefinition);
 
 		integrationSupport.createAndDeployStream(stream);
 

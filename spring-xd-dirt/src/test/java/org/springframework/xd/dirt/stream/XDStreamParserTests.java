@@ -33,6 +33,7 @@ import org.springframework.xd.dirt.module.ModuleRegistry;
 import org.springframework.xd.dirt.stream.dsl.StreamDefinitionException;
 import org.springframework.xd.dirt.zookeeper.EmbeddedZooKeeper;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
+import org.springframework.xd.module.ModuleDefinition;
 import org.springframework.xd.module.ModuleDescriptor;
 import org.springframework.xd.module.ModuleType;
 import org.springframework.xd.module.TestModuleDefinitions;
@@ -173,7 +174,7 @@ public class XDStreamParserTests {
 		StreamDefinitionRepository streamRepo = mock(StreamDefinitionRepository.class);
 		parser = new XDStreamParser(streamRepo, moduleRegistry(),
 				new DefaultModuleOptionsMetadataResolver());
-		when(streamRepo.findOne("xxx")).thenReturn(new StreamDefinition("xxx", "http | file"));
+		when(streamRepo.findOne("xxx")).thenReturn(new StreamDefinition("xxx", "http | file", Collections.<ModuleDefinition>emptyList()));
 		List<ModuleDescriptor> requests = parser.parse("test", "tap:stream:xxx.http > file", stream);
 		assertEquals(1, requests.size());
 		assertEquals("tap:stream:xxx.http.0", requests.get(0).getSourceChannelName());

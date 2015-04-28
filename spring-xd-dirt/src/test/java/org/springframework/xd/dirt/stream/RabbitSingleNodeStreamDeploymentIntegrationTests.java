@@ -72,8 +72,8 @@ public class RabbitSingleNodeStreamDeploymentIntegrationTests extends
 
 	@Test
 	public void mqttSourceStreamReceivesMqttSinkStreamOutput() throws Exception {
-		StreamDefinition mqtt1 = new StreamDefinition("mqtt1", "queue:mqttsource > mqtt --topic=foo --async=true");
-		StreamDefinition mqtt2 = new StreamDefinition("mqtt2", "mqtt --topics=foo --charset=UTF-8 > queue:mqttsink");
+		StreamDefinition mqtt1 = integrationSupport.streamDefinitionFactory().createStreamDefinition("mqtt1", "queue:mqttsource > mqtt --topic=foo --async=true");
+		StreamDefinition mqtt2 = integrationSupport.streamDefinitionFactory().createStreamDefinition("mqtt2", "mqtt --topics=foo --charset=UTF-8 > queue:mqttsink");
 		integrationSupport.createAndDeployStream(mqtt1);
 		integrationSupport.createAndDeployStream(mqtt2);
 
@@ -91,8 +91,8 @@ public class RabbitSingleNodeStreamDeploymentIntegrationTests extends
 
 	@Test
 	public void mqttSourceStreamReceivesMqttSinkStreamOutputBinary() throws Exception {
-		StreamDefinition mqtt3 = new StreamDefinition("mqtt3", "queue:mqttsource2 > mqtt --topic=foo2");
-		StreamDefinition mqtt4 = new StreamDefinition("mqtt4", "mqtt --topics=foo2 --binary=true > queue:mqttsink2");
+		StreamDefinition mqtt3 = integrationSupport.streamDefinitionFactory().createStreamDefinition("mqtt3", "queue:mqttsource2 > mqtt --topic=foo2");
+		StreamDefinition mqtt4 = integrationSupport.streamDefinitionFactory().createStreamDefinition("mqtt4", "mqtt --topics=foo2 --binary=true > queue:mqttsink2");
 		integrationSupport.createAndDeployStream(mqtt3);
 		integrationSupport.createAndDeployStream(mqtt4);
 

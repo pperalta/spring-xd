@@ -43,6 +43,7 @@ import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.StreamDeploymentsPath;
 import org.springframework.xd.dirt.stream.Stream;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.util.PagingUtility;
 import org.springframework.xd.dirt.zookeeper.Paths;
@@ -67,10 +68,15 @@ public class ZooKeeperStreamRepository implements StreamRepository, Initializing
 
 	private final RepositoryConnectionListener connectionListener = new RepositoryConnectionListener();
 
+	private StreamDefinitionRepository streamDefinitionRepository;
+
 	@Autowired
-	public ZooKeeperStreamRepository(ZooKeeperConnection zkConnection) {
+	public ZooKeeperStreamRepository(ZooKeeperConnection zkConnection,
+			StreamDefinitionRepository streamDefinitionRepository) {
 		this.zkConnection = zkConnection;
+		this.streamDefinitionRepository = streamDefinitionRepository;
 	}
+
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
@@ -108,16 +114,12 @@ public class ZooKeeperStreamRepository implements StreamRepository, Initializing
 
 	@Override
 	public Stream findOne(String id) {
-		CuratorFramework client = zkConnection.getClient();
-		String path = Paths.build(Paths.STREAMS, id);
 		try {
-			Stat definitionStat = client.checkExists().forPath(path);
-			if (definitionStat != null) {
-				byte[] data = client.getData().forPath(path);
-				Map<String, String> map = ZooKeeperUtils.bytesToMap(data);
-				Stream stream = new Stream(new StreamDefinition(id, map.get("definition")));
-
-				Stat deployStat = client.checkExists().forPath(Paths.build(Paths.STREAM_DEPLOYMENTS, id));
+			StreamDefinition definition = streamDefinitionRepository.findOne(id);
+			if (definition != null) {
+				Stream stream = new Stream(definition);
+				Stat deployStat = zkConnection.getClient().checkExists()
+						.forPath(Paths.build(Paths.STREAM_DEPLOYMENTS, id));
 				if (deployStat != null) {
 					stream.setStartedAt(new Date(deployStat.getCtime()));
 					stream.setStatus(getDeploymentStatus(id));

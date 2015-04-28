@@ -17,6 +17,7 @@
 package org.springframework.xd.dirt.core;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.springframework.util.Assert;
@@ -26,7 +27,7 @@ import org.springframework.xd.module.ModuleDefinition;
  * Represents the base model for a data flow in the system. Every Spring XD definition is represented by at least a
  * <code>name</code (which also uniquely identifies the definition). Each definition also has a <code>definition</code>
  * property which contains a String value representing the DSL to create the respective definition.
- * 
+ *
  * @author Gunnar Hillert
  * @since 1.0
  */
@@ -53,15 +54,16 @@ public abstract class BaseDefinition implements Comparable<BaseDefinition> {
 
 	/**
 	 * Create a new definition. By default this will not be deployed.
-	 * 
+	 *
 	 * @param name the name
 	 * @param definition the definition
 	 */
-	public BaseDefinition(String name, String definition) {
+	public BaseDefinition(String name, String definition, List<ModuleDefinition> moduleDefinitions) {
 		Assert.hasText(name, "Name can not be empty");
 		Assert.hasText(definition, "Definition can not be empty");
 		this.name = name;
 		this.definition = definition;
+		this.moduleDefinitions = moduleDefinitions;
 	}
 
 	/**
@@ -78,12 +80,8 @@ public abstract class BaseDefinition implements Comparable<BaseDefinition> {
 		return name;
 	}
 
-	public void setModuleDefinitions(List<ModuleDefinition> moduleDefinitions) {
-		this.moduleDefinitions = moduleDefinitions;
-	}
-
 	public List<ModuleDefinition> getModuleDefinitions() {
-		return this.moduleDefinitions;
+		return Collections.unmodifiableList(this.moduleDefinitions);
 	}
 
 	@Override

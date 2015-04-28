@@ -35,7 +35,7 @@ import org.springframework.xd.dirt.stream.JobDefinition;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.NotDeployedException;
-import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.store.DomainRepository;
@@ -63,15 +63,20 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	@Autowired
 	private JobDefinitionRepository jobDefinitionRepository;
 
+	@Autowired
+	private StreamDefinitionFactory streamDefinitionFactory;
+
 	public DeploymentMessageConsumer() {
 	}
 
 	public DeploymentMessageConsumer(StreamDeployer streamDeployer, JobDeployer jobDeployer,
-			StreamDefinitionRepository streamDefinitionRepository, JobDefinitionRepository jobDefinitionRepository) {
+			StreamDefinitionRepository streamDefinitionRepository, JobDefinitionRepository jobDefinitionRepository,
+			StreamDefinitionFactory streamDefinitionFactory) {
 		this.streamDeployer = streamDeployer;
 		this.jobDeployer = jobDeployer;
 		this.streamDefinitionRepository = streamDefinitionRepository;
 		this.jobDefinitionRepository = jobDefinitionRepository;
+		this.streamDefinitionFactory = streamDefinitionFactory;
 	}
 
 	/**
@@ -93,7 +98,7 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 			case createAndDeploy: {
 				switch (type) {
 					case Stream:
-						streamDefinitionRepository.save(new StreamDefinition(name, message.getDefinition()));
+						streamDefinitionRepository.save(streamDefinitionFactory.createStreamDefinition(name, message.getDefinition()));
 						break;
 					case Job:
 						jobDefinitionRepository.save(new JobDefinition(name, message.getDefinition()));

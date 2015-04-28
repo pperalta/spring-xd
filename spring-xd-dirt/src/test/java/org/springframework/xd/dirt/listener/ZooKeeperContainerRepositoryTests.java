@@ -43,13 +43,24 @@ import org.springframework.xd.dirt.cluster.ContainerAttributes;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.container.store.ZooKeeperContainerRepository;
 import org.springframework.xd.dirt.listener.ZooKeeperContainerRepositoryTests.ZooKeeperContainerRepositoryTestsConfig;
+import org.springframework.xd.dirt.module.ModuleDependencyRepository;
+import org.springframework.xd.dirt.module.ModuleRegistry;
+import org.springframework.xd.dirt.module.store.ZooKeeperComposedModuleDefinitionRegistry;
+import org.springframework.xd.dirt.module.store.ZooKeeperModuleDependencyRepository;
 import org.springframework.xd.dirt.module.store.ZooKeeperModuleMetadataRepository;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
+import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
+import org.springframework.xd.dirt.stream.XDParser;
+import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperJobRepository;
+import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperStreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperStreamRepository;
 import org.springframework.xd.dirt.zookeeper.EmbeddedZooKeeper;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperAccessException;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
+import org.springframework.xd.module.options.DefaultModuleOptionsMetadataResolver;
+import org.springframework.xd.module.options.ModuleOptionsMetadataResolver;
 
 /**
  * Integration test of {@link ZooKeeperContainerRepository}.
@@ -215,13 +226,44 @@ public class ZooKeeperContainerRepositoryTests {
 
 		@Bean
 		public ZooKeeperModuleMetadataRepository zooKeeperModuleMetadataRepo() {
-			return new ZooKeeperModuleMetadataRepository(zooKeeperConnection(), new ZooKeeperStreamRepository(
-					zooKeeperConnection()), new ZooKeeperJobRepository(zooKeeperConnection()));
+			return new ZooKeeperModuleMetadataRepository(zooKeeperConnection(),
+					new ZooKeeperStreamRepository(zooKeeperConnection(), streamDefinitionRepository()),
+					new ZooKeeperJobRepository(zooKeeperConnection()));
 		}
 
 		@Bean
 		public ContainerRepository containerRepository() {
 			return new ZooKeeperContainerRepository(zooKeeperConnection(), zooKeeperModuleMetadataRepo());
+		}
+
+		@Bean
+		public ModuleDependencyRepository moduleDependencyRepository() {
+			return new ZooKeeperModuleDependencyRepository(zooKeeperConnection());
+		}
+
+		@Bean
+		public ModuleRegistry moduleRegistry() {
+			return new ZooKeeperComposedModuleDefinitionRegistry(moduleDependencyRepository(), zooKeeperConnection());
+		}
+
+		@Bean
+		public ModuleOptionsMetadataResolver moduleOptionsMetadataResolver() {
+			return new DefaultModuleOptionsMetadataResolver();
+		}
+
+		@Bean
+		public XDParser parser() {
+			return new XDStreamParser(streamDefinitionRepository(), moduleRegistry(), moduleOptionsMetadataResolver());
+		}
+
+		@Bean
+		public StreamDefinitionFactory streamDefinitionFactory() {
+			return new StreamDefinitionFactory(parser());
+		}
+
+		@Bean
+		public StreamDefinitionRepository streamDefinitionRepository() {
+			return new ZooKeeperStreamDefinitionRepository(zooKeeperConnection(), moduleDependencyRepository());
 		}
 	}
 

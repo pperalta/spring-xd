@@ -61,6 +61,7 @@ import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentMessageC
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.ParsingContext;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamRepository;
@@ -195,7 +196,7 @@ public class Dependencies {
 
 	@Bean
 	public StreamRepository streamRepository() {
-		return new ZooKeeperStreamRepository(zooKeeperConnection());
+		return new ZooKeeperStreamRepository(zooKeeperConnection(), streamDefinitionRepository());
 	}
 
 	@Bean
@@ -264,7 +265,7 @@ public class Dependencies {
 			@Override
 			public void publishDeploymentMessage(DeploymentMessage deploymentMessage) {
 				DeploymentMessageConsumer consumer = new DeploymentMessageConsumer(streamDeployer(),
-						jobDeployer(), streamDefinitionRepository(), jobDefinitionRepository());
+						jobDeployer(), streamDefinitionRepository(), jobDefinitionRepository(), streamDefinitionFactory());
 				try {
 					consumer.consumeMessage(deploymentMessage);
 				}
@@ -308,6 +309,11 @@ public class Dependencies {
 	public DeploymentValidator jobDeploymentValidator() {
 		return new DefaultDeploymentValidator(jobDefinitionRepository(), xdJobRepository(),
 				parser(), ParsingContext.job);
+	}
+
+	@Bean
+	public StreamDefinitionFactory streamDefinitionFactory() {
+		return new StreamDefinitionFactory(parser());
 	}
 
 }

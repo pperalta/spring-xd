@@ -67,7 +67,7 @@ public class DeployerTests {
 
 	@Test
 	public void testValidDeploymentProperties() {
-		StreamDefinition testStream = new StreamDefinition("foo", "http | log");
+		StreamDefinition testStream = integrationSupport.streamDefinitionFactory().createStreamDefinition("foo", "http | log");
 		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		Map<String, String> properties = Collections.singletonMap("module.log.count", "3");
@@ -77,7 +77,7 @@ public class DeployerTests {
 
 	@Test
 	public void testValidDeploymentPropertiesUsesLabel() {
-		StreamDefinition testStream = new StreamDefinition("foo", "http | bar:log");
+		StreamDefinition testStream = integrationSupport.streamDefinitionFactory().createStreamDefinition("foo", "http | bar:log");
 		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		Map<String, String> properties = Collections.singletonMap("module.bar.count", "3");
@@ -87,7 +87,7 @@ public class DeployerTests {
 
 	@Test
 	public void testInvalidDeploymentProperties() {
-		StreamDefinition testStream = new StreamDefinition("foo", "http | log");
+		StreamDefinition testStream = integrationSupport.streamDefinitionFactory().createStreamDefinition("foo", "http | log");
 		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		thrown.expect(IllegalArgumentException.class);
@@ -100,7 +100,7 @@ public class DeployerTests {
 
 	@Test
 	public void testInvalidDeploymentPropertiesShouldUseLabel() {
-		StreamDefinition testStream = new StreamDefinition("foo", "http | bar: log");
+		StreamDefinition testStream = integrationSupport.streamDefinitionFactory().createStreamDefinition("foo", "http | bar: log");
 		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		thrown.expect(IllegalArgumentException.class);

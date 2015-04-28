@@ -40,7 +40,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingEnabledWithExplicitModuleCounts() throws InterruptedException {
 		String streamName = "directBindingEnabledWithExplicitModuleCounts";
-		StreamDefinition sd = new StreamDefinition(streamName, getHttpLogStream());
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, getHttpLogStream());
 		integrationSupport.streamDefinitionRepository().save(sd);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.http.count", "0");
@@ -57,7 +57,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingEnabledWithWildcardModuleCount() throws InterruptedException {
 		String streamName = "directBindingEnabledWithWildcardModuleCount";
-		StreamDefinition sd = new StreamDefinition(streamName, getHttpLogStream());
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, getHttpLogStream());
 		integrationSupport.streamDefinitionRepository().save(sd);
 		integrationSupport.deployStream(sd, Collections.singletonMap("module.*.count", "0"));
 		List<Binding> bindings = getMessageBusBindingsForStream(streamName);
@@ -71,7 +71,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingEnabledWithCriteria() throws InterruptedException {
 		String streamName = "directBindingEnabledWithCriteria";
-		StreamDefinition sd = new StreamDefinition(streamName, getHttpLogStream());
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, getHttpLogStream());
 		integrationSupport.streamDefinitionRepository().save(sd);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.http.count", "0");
@@ -90,7 +90,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingNotEnabledWithMismatchedCounts() throws InterruptedException {
 		String streamName = "directBindingNotEnabledWithMismatchedCounts";
-		StreamDefinition sd = new StreamDefinition(streamName, getHttpLogStream());
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, getHttpLogStream());
 		integrationSupport.streamDefinitionRepository().save(sd);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.http.count", "0");
@@ -107,7 +107,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingNotEnabledWithOverriddenCount() throws InterruptedException {
 		String streamName = "directBindingNotEnabledWithOverriddenCount";
-		StreamDefinition sd = new StreamDefinition(streamName, "http | log");
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, "http | log");
 		integrationSupport.streamDefinitionRepository().save(sd);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.*.count", "0");
@@ -124,7 +124,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingNotEnabledWithMismatchedCriteria() throws InterruptedException {
 		String streamName = "directBindingNotEnabledWithMismatchedCriteria";
-		StreamDefinition sd = new StreamDefinition(streamName, getHttpLogStream());
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, getHttpLogStream());
 		integrationSupport.streamDefinitionRepository().save(sd);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.http.count", "0");
@@ -143,7 +143,7 @@ public abstract class AbstractDistributedTransportSingleNodeStreamDeploymentInte
 	@Test
 	public void directBindingEnabledForPartOfStream() throws InterruptedException {
 		String streamName = "directBindingEnabledForPartOfStream";
-		StreamDefinition sd = new StreamDefinition(streamName, String.format("http --port=%s | filter | log",
+		StreamDefinition sd = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, String.format("http --port=%s | filter | log",
 				SocketUtils.findAvailableServerSocket()));
 		integrationSupport.streamDefinitionRepository().save(sd);
 		Map<String, String> props = new HashMap<String, String>();

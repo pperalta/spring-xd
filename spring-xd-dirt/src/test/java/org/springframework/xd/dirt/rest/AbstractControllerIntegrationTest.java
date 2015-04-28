@@ -43,15 +43,17 @@ import org.springframework.xd.dirt.rest.AbstractControllerIntegrationTest.Legacy
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.JobRepository;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperAccessException;
+import org.springframework.xd.module.options.ModuleOptionsMetadataResolver;
 
 /**
  * Base class for Controller layer tests. Takes care of resetting the mocked (be them mockito mocks or <i>e.g.</i> in
  * memory) dependencies before each test.
- * 
+ *
  * @author Eric Bottard
  * @author Ilayaperumal Gopinathan
  */
@@ -98,6 +100,9 @@ public class AbstractControllerIntegrationTest {
 	@Autowired
 	protected ModuleMetadataRepository moduleMetadataRepository;
 
+	@Autowired
+	ModuleOptionsMetadataResolver moduleOptionsMetadataResolver;
+
 	// Instance repositories
 	@Autowired
 	protected StreamRepository streamRepository;
@@ -120,6 +125,9 @@ public class AbstractControllerIntegrationTest {
 
 	@Autowired
 	private JobService jobService;
+
+	@Autowired
+	protected StreamDefinitionFactory streamDefinitionFactory;
 
 	@Before
 	public void resetDependencies() {

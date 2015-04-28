@@ -33,7 +33,6 @@ import org.junit.Test;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.server.SingleNodeApplication;
 import org.springframework.xd.dirt.server.TestApplicationBootstrap;
-import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.test.SingleNodeIntegrationTestSupport;
 import org.springframework.xd.dirt.test.process.SingleNodeProcessingChain;
 import org.springframework.xd.dirt.test.process.SingleNodeProcessingChainConsumer;
@@ -45,7 +44,7 @@ import org.springframework.xd.dirt.test.source.SingleNodeNamedChannelSourceFacto
 
 /**
  * What a Module/Stream developer might write to test a processing chain.
- * 
+ *
  * @author David Turanski
  */
 public class ExampleProcessingChainTests {
@@ -70,7 +69,7 @@ public class ExampleProcessingChainTests {
 		String streamDefinition = "queue:producer >" + processingChainUnderTest + "> queue:consumer";
 		String streamName = "test";
 
-		StreamDefinition testStream = new StreamDefinition(streamName, streamDefinition);
+		StreamDefinition testStream = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, streamDefinition);
 		integrationSupport.createAndDeployStream(testStream);
 
 		MessageBus messageBus = integrationSupport.messageBus();
@@ -139,7 +138,7 @@ public class ExampleProcessingChainTests {
 
 		SingleNodeProcessingChainProducer chain = chainProducer(application, "dateToDateTime", processingChainUnderTest);
 
-		StreamDefinition tap = new StreamDefinition("testtap", "tap:stream:dateToDateTime.0 > queue:tap");
+		StreamDefinition tap = integrationSupport.streamDefinitionFactory().createStreamDefinition("testtap", "tap:stream:dateToDateTime.0 > queue:tap");
 		integrationSupport.createAndDeployStream(tap);
 		NamedChannelSink sink = new SingleNodeNamedChannelSinkFactory(integrationSupport.messageBus()).createNamedChannelSink("queue:tap");
 

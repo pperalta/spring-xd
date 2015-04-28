@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.springframework.xd.dirt.stream.ParsingContext.stream;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,7 @@ import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.dirt.zookeeper.EmbeddedZooKeeper;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
+import org.springframework.xd.module.ModuleDefinition;
 import org.springframework.xd.module.options.DefaultModuleOptionsMetadataResolver;
 
 /**
@@ -627,7 +629,7 @@ public class StreamConfigParserTests {
 	StreamNode parse(String streamDefinition) {
 		StreamNode streamNode = getParser().parse(streamDefinition);
 		if (streamNode.getStreamName() != null) {
-			testRepository.save(new StreamDefinition(streamNode.getStreamName(), streamNode.getStreamData()));
+			testRepository.save(new StreamDefinition(streamNode.getStreamName(), streamNode.getStreamData(), Collections.<ModuleDefinition>emptyList()));
 		}
 		return streamNode;
 	}
@@ -639,7 +641,7 @@ public class StreamConfigParserTests {
 			sname = streamName;
 		}
 		if (sname != null) {
-			testRepository.save(new StreamDefinition(sname, streamNode.getStreamData()));
+			testRepository.save(new StreamDefinition(sname, streamNode.getStreamData(), Collections.<ModuleDefinition>emptyList()));
 		}
 		return streamNode;
 	}

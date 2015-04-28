@@ -17,6 +17,7 @@
 package org.springframework.xd.dirt.stream.zookeeper;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.util.Assert;
 import org.springframework.xd.dirt.module.ModuleDependencyRepository;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
@@ -120,9 +122,10 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 	@Override
 	public <S extends StreamDefinition> S save(S entity) {
 		try {
+			Assert.notEmpty(entity.getModuleDefinitions());
+
 			Map<String, String> map = new HashMap<>();
 			map.put(DEFINITION_KEY, entity.getDefinition());
-
 			map.put(MODULE_DEFINITIONS_KEY, objectWriter.writeValueAsString(entity.getModuleDefinitions()));
 
 			CuratorFramework client = zkConnection.getClient();
@@ -154,12 +157,11 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 				return null;
 			}
 			Map<String, String> map = ZooKeeperUtils.bytesToMap(bytes);
-			StreamDefinition streamDefinition = new StreamDefinition(id, map.get(DEFINITION_KEY));
-			if (map.get(MODULE_DEFINITIONS_KEY) != null) {
-				List<ModuleDefinition> moduleDefinitions = objectReader.readValue(map.get(MODULE_DEFINITIONS_KEY));
-				streamDefinition.setModuleDefinitions(moduleDefinitions);
-			}
-			return streamDefinition;
+			List<ModuleDefinition> moduleDefinitions = map.containsKey(MODULE_DEFINITIONS_KEY)
+					? objectReader.<List<ModuleDefinition>>readValue(map.get(MODULE_DEFINITIONS_KEY))
+					: Collections.<ModuleDefinition>emptyList();
+
+			return new StreamDefinition(id, map.get(DEFINITION_KEY), moduleDefinitions);
 		}
 		catch (Exception e) {
 			//NoNodeException - the definition does not exist
@@ -213,7 +215,20 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 
 	@Override
 	public void delete(String id) {
+		// the StreamDefinition has to be loaded in order to obtain
+		// its module definitions; these are used to delete dependencies
+		// via StreamDefinitionRepositoryUtils.deleteDependencies
+		StreamDefinition definition = findOne(id);
+		if (definition != null) {
+			delete(findOne(id));
+		}
+	}
+
+	@Override
+	public void delete(StreamDefinition entity) {
+		String id = entity.getName();
 		logger.trace("Deleting stream {}", id);
+
 		String path = Paths.build(Paths.STREAMS, id);
 		try {
 			zkConnection.getClient().delete().deletingChildrenIfNeeded().forPath(path);
@@ -222,12 +237,8 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 			//NoNodeException - nothing to delete
 			ZooKeeperUtils.wrapAndThrowIgnoring(e, NoNodeException.class);
 		}
-	}
 
-	@Override
-	public void delete(StreamDefinition entity) {
 		StreamDefinitionRepositoryUtils.deleteDependencies(moduleDependencyRepository, entity);
-		this.delete(entity.getName());
 	}
 
 	@Override

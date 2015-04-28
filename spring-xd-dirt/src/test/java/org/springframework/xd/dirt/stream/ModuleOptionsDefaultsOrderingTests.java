@@ -146,7 +146,7 @@ public class ModuleOptionsDefaultsOrderingTests {
 		String streamDefinition = String.format("queue:producer > %s > queue:consumer", dslDefinition);
 		String streamName = "test";
 
-		StreamDefinition testStream = new StreamDefinition(streamName, streamDefinition);
+		StreamDefinition testStream = integrationSupport.streamDefinitionFactory().createStreamDefinition(streamName, streamDefinition);
 		integrationSupport.createAndDeployStream(testStream);
 
 		MessageBus messageBus = integrationSupport.messageBus();

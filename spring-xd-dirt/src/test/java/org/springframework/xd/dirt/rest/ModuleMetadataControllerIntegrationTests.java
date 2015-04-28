@@ -50,6 +50,8 @@ import org.springframework.xd.dirt.stream.Job;
 import org.springframework.xd.dirt.stream.JobDefinition;
 import org.springframework.xd.dirt.stream.Stream;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionFactory;
+import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.module.ModuleDefinition;
 import org.springframework.xd.module.ModuleType;
 import org.springframework.xd.module.TestModuleDefinitions;
@@ -83,11 +85,36 @@ public class ModuleMetadataControllerIntegrationTests extends AbstractController
 		deploymentProps2.put("count", "2");
 		Properties deploymentProps3 = new Properties();
 		deploymentProps3.put("criteria", "groups.contains('hdfs')");
-		Stream stream1 = new Stream(new StreamDefinition("s1", "http | log"));
+
+		ModuleDefinition sinkDefinition = TestModuleDefinitions.dummy("sink", ModuleType.sink);
+		ModuleDefinition sourceDefinition = TestModuleDefinitions.dummy("source", ModuleType.source);
+		ModuleDefinition jobDefinition = TestModuleDefinitions.dummy("job", ModuleType.job);
+
+		ArrayList<ModuleDefinition> definitions = new ArrayList<ModuleDefinition>();
+		definitions.add(TestModuleDefinitions.dummy("source", ModuleType.source));
+		when(moduleRegistry.findDefinitions("source")).thenReturn(definitions);
+		when(moduleRegistry.findDefinitions("http")).thenReturn(definitions);
+		when(moduleRegistry.findDefinition("http", ModuleType.source)).thenReturn(sourceDefinition);
+
+		definitions = new ArrayList<ModuleDefinition>();
+		definitions.add(TestModuleDefinitions.dummy("sink", ModuleType.sink));
+		when(moduleRegistry.findDefinitions("sink")).thenReturn(definitions);
+		when(moduleRegistry.findDefinitions("log")).thenReturn(definitions);
+		when(moduleRegistry.findDefinition("log", ModuleType.sink)).thenReturn(sinkDefinition);
+
+		definitions.add(TestModuleDefinitions.dummy("job", ModuleType.job));
+		when(moduleRegistry.findDefinitions("job")).thenReturn(definitions);
+		when(moduleRegistry.findDefinitions("job")).thenReturn(definitions);
+		when(moduleRegistry.findDefinition("job", ModuleType.job)).thenReturn(jobDefinition);
+
+		StreamDefinitionFactory streamDefinitionFactory = new StreamDefinitionFactory(
+				new XDStreamParser(streamDefinitionRepository, moduleRegistry, moduleOptionsMetadataResolver));
+
+		Stream stream1 = new Stream(streamDefinitionFactory.createStreamDefinition("s1", "http | log"));
 		stream1.setStatus(new DeploymentUnitStatus(State.deployed));
 		ModuleMetadata entity1 = new ModuleMetadata(new ModuleMetadata.Id("1", "s1.source.http.0"),
 				entityProps1, deploymentProps1, State.deployed);
-		Stream stream2 = new Stream(new StreamDefinition("s2", "http | log"));
+		Stream stream2 = new Stream(streamDefinitionFactory.createStreamDefinition("s2", "http | log"));
 		stream1.setStatus(new DeploymentUnitStatus(State.failed));
 
 		ModuleMetadata entity2 = new ModuleMetadata(new ModuleMetadata.Id("2", "s2.sink.log.1"),
@@ -116,26 +143,7 @@ public class ModuleMetadataControllerIntegrationTests extends AbstractController
 		when(moduleMetadataRepository.findAllByContainerId(pageable, "2")).thenReturn(pageEntity2);
 		when(moduleMetadataRepository.findOne("1", "s1.source.http.0")).thenReturn(entity1);
 		when(moduleMetadataRepository.findAllByModuleId(pageable, "j3.job.myjob.0")).thenReturn(pageEntity3);
-		ModuleDefinition sinkDefinition = TestModuleDefinitions.dummy("sink", ModuleType.sink);
-		ModuleDefinition sourceDefinition = TestModuleDefinitions.dummy("source", ModuleType.source);
-		ModuleDefinition jobDefinition = TestModuleDefinitions.dummy("job", ModuleType.job);
 
-		ArrayList<ModuleDefinition> definitions = new ArrayList<ModuleDefinition>();
-		definitions.add(TestModuleDefinitions.dummy("source", ModuleType.source));
-		when(moduleRegistry.findDefinitions("source")).thenReturn(definitions);
-		when(moduleRegistry.findDefinitions("http")).thenReturn(definitions);
-		when(moduleRegistry.findDefinition("http", ModuleType.source)).thenReturn(sourceDefinition);
-
-		definitions = new ArrayList<ModuleDefinition>();
-		definitions.add(TestModuleDefinitions.dummy("sink", ModuleType.sink));
-		when(moduleRegistry.findDefinitions("sink")).thenReturn(definitions);
-		when(moduleRegistry.findDefinitions("log")).thenReturn(definitions);
-		when(moduleRegistry.findDefinition("log", ModuleType.sink)).thenReturn(sinkDefinition);
-
-		definitions.add(TestModuleDefinitions.dummy("job", ModuleType.job));
-		when(moduleRegistry.findDefinitions("job")).thenReturn(definitions);
-		when(moduleRegistry.findDefinitions("job")).thenReturn(definitions);
-		when(moduleRegistry.findDefinition("job", ModuleType.job)).thenReturn(jobDefinition);
 		mockMvc.perform(
 				post("/streams/definitions").param("name", stream1.getDefinition().getName()).param("definition",
 						"http | log").param(

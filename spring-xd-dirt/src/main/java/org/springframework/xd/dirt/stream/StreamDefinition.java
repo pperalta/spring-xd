@@ -16,14 +16,17 @@
 
 package org.springframework.xd.dirt.stream;
 
+import java.util.List;
+
 import org.springframework.xd.dirt.core.BaseDefinition;
+import org.springframework.xd.module.ModuleDefinition;
 
 /**
  * Represents a model for a data flow in the system. This is typically described with a DSL expression of the form
  * {@code source | [processor | ]* sink}.
- * 
+ *
  * @see XDParser
- * 
+ *
  * @author Eric Bottard
  */
 public class StreamDefinition extends BaseDefinition {
@@ -35,12 +38,12 @@ public class StreamDefinition extends BaseDefinition {
 
 	/**
 	 * Create a new StreamDefinition. By default this stream will not be deployed.
-	 * 
+	 *
 	 * @param name the stream name
 	 * @param definition the stream definition
 	 */
-	public StreamDefinition(String name, String definition) {
-		super(name, definition);
+	public StreamDefinition(String name, String definition, List<ModuleDefinition> moduleDefinitions) {
+		super(name, definition, moduleDefinitions);
 	}
 
 }
