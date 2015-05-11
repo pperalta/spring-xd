@@ -33,15 +33,18 @@ import org.junit.Test;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.xd.dirt.module.ModuleRegistry;
+import org.springframework.xd.dirt.module.ResourceModuleRegistry;
 import org.springframework.xd.dirt.module.store.ZooKeeperModuleDependencyRepository;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperStreamDefinitionRepository;
 import org.springframework.xd.dirt.zookeeper.EmbeddedZooKeeper;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
+import org.springframework.xd.module.options.DefaultModuleOptionsMetadataResolver;
 
 /**
  * Unit tests for {@link ZooKeeperStreamDefinitionRepository}.
- * 
+ *
  * @author Eric Bottard
  * @author David Turanski
  * @author Gary Russell
@@ -66,7 +69,9 @@ public class ZooKeeperStreamDefinitionRepositoryTests {
 	@Before
 	public void createRepository() throws Exception {
 		this.repository = new ZooKeeperStreamDefinitionRepository(zkConnection,
-				new ZooKeeperModuleDependencyRepository(zkConnection));
+				new ZooKeeperModuleDependencyRepository(zkConnection),
+				new ResourceModuleRegistry("file:../modules"),
+				new DefaultModuleOptionsMetadataResolver());
 		repository.afterPropertiesSet();
 		for (int i = 0; !zkConnection.isConnected() && i < 100; i++) {
 			Thread.sleep(100);

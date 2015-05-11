@@ -29,23 +29,37 @@ import java.util.Map;
  * {@link org.springframework.xd.dirt.server.admin.deployment.DeploymentMessagePublisher}.
  *
  * @author Ilayaperumal Gopinathan
+ * @author Patrick Peralta
  */
 public interface DeploymentValidator {
 
 	/**
-	 * Validate before saving the definitions.
+	 * Assert that the definition can be saved. This may include checks for:
+	 * <ul>
+	 *     <li>Existing instances of a definition with this name in the repository</li>
+	 *     <li>Parsing and validation of the definition string</li>
+	 * </ul>
 	 *
 	 * @param name the deployment unit name
 	 * @param definition the definition
+	 *
 	 * @throws DefinitionAlreadyExistsException
 	 */
 	void validateBeforeSave(String name, String definition) throws DefinitionAlreadyExistsException;
 
 	/**
-	 * Validate before deploying.
+	 * Validate the definition (stream or job) before deployment. This may include
+	 * validating...
+	 * <ul>
+	 *     <li>that the definition already exists in the definition repository</li>
+	 *     <li>that the deployment properties are valid</li>
+	 * </ul>
 	 *
 	 * @param name the deployment unit name
-	 * @param properties
+	 * @param properties deployment properties
+	 *
+	 * @return a definition object <D> obtained from the definition repository
+	 *
 	 * @throws AlreadyDeployedException
 	 * @throws DefinitionAlreadyExistsException
 	 */
@@ -53,7 +67,16 @@ public interface DeploymentValidator {
 			DefinitionAlreadyExistsException;
 
 	/**
-	 * Validate before un-deployment.
+	 * Assert that the deployment unit has been deployed.
+	 *
+	 * @param name the deployment unit name
+	 * @throws NoSuchDefinitionException
+	 * @throws NotDeployedException
+	 */
+	void validateDeployed(String name) throws NoSuchDefinitionException, NotDeployedException;
+
+	/**
+	 * Assert that the deployment unit has been deployed prior to undeploying.
 	 *
 	 * @param name the deployment unit name
 	 * @throws NoSuchDefinitionException
@@ -62,10 +85,11 @@ public interface DeploymentValidator {
 	void validateBeforeUndeploy(String name) throws NoSuchDefinitionException, NotDeployedException;
 
 	/**
-	 * Validate before deletion of the definition.
+	 * Assert that the deployment unit definition exists before deleting.
 	 *
 	 * @param name the deployment unit name
 	 * @throws NoSuchDefinitionException
 	 */
 	void validateBeforeDelete(String name) throws NoSuchDefinitionException;
 }
+

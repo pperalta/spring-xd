@@ -16,37 +16,27 @@
 
 package org.springframework.xd.dirt.stream;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.repository.CrudRepository;
-import org.springframework.data.repository.PagingAndSortingRepository;
 import org.springframework.util.Assert;
 import org.springframework.xd.dirt.core.BaseDefinition;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.ResourceDeployer;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
-import org.springframework.xd.module.ModuleDefinition;
-import org.springframework.xd.module.ModuleDescriptor;
 import org.springframework.xd.rest.domain.support.DeploymentPropertiesFormat;
 
 /**
- * Abstract implementation of the @link {@link org.springframework.xd.dirt.core.ResourceDeployer} interface. It provides
- * the basic support for calling CrudRepository methods and sending deployment messages.
+ * Abstract implementation of the @link {@link org.springframework.xd.dirt.core.ResourceDeployer}
+ * interface. It provides the basic support for calling CrudRepository methods and sending
+ * deployment messages.
  *
  * @author Luke Taylor
  * @author Mark Pollack
@@ -54,80 +44,57 @@ import org.springframework.xd.rest.domain.support.DeploymentPropertiesFormat;
  * @author Andy Clement
  * @author David Turanski
  */
-public abstract class AbstractDeployer<D extends BaseDefinition> implements ResourceDeployer<D>, DeploymentValidator {
+public abstract class AbstractDeployer<D extends BaseDefinition, I extends BaseInstance<D>>
+		implements ResourceDeployer<D> {
 
 	private static final Logger logger = LoggerFactory.getLogger(AbstractDeployer.class);
-
-	/**
-	 * Pattern used for parsing a single deployment property key. Group 1 is the module name, Group 2 is the 
-	 * deployment property name.
-	 */
-	private static final Pattern DEPLOYMENT_PROPERTY_PATTERN = Pattern.compile("module\\.([^\\.]+)\\.([^=]+)");
-
-	private final PagingAndSortingRepository<D, String> repository;
 
 	private final ZooKeeperConnection zkConnection;
 
 	protected final XDParser parser;
+
+	protected final DeploymentHandler deploymentHandler;
 
 	/**
 	 * Used in exception messages as well as indication to the parser.
 	 */
 	protected final ParsingContext definitionKind;
 
-	protected AbstractDeployer(ZooKeeperConnection zkConnection, PagingAndSortingRepository<D, String> repository,
-			XDParser parser, ParsingContext parsingContext) {
+	protected final DeploymentValidator validator;
+
+	protected AbstractDeployer(ZooKeeperConnection zkConnection, XDParser parser,
+			ParsingContext parsingContext, DeploymentValidator validator,
+			DeploymentHandler deploymentHandler) {
 		Assert.notNull(zkConnection, "ZooKeeper connection cannot be null");
-		Assert.notNull(repository, "Repository cannot be null");
 		Assert.notNull(parsingContext, "Entity type kind cannot be null");
 		this.zkConnection = zkConnection;
-		this.repository = repository;
 		this.definitionKind = parsingContext;
 		this.parser = parser;
+		this.validator = validator;
+		this.deploymentHandler = deploymentHandler;
 	}
 
 	@Override
-	public D save(D definition) {
-		Assert.notNull(definition, "Definition may not be null");
-		if (repository.findOne(definition.getName()) != null) {
-			throwDefinitionAlreadyExistsException(definition);
-		}
-		List<ModuleDescriptor> moduleDescriptors = parser.parse(definition.getName(),
-				definition.getDefinition(), definitionKind);
+	public void deploy(String name, Map<String, String> properties) {
+		logger.info("Deploying {}", name);
 
-		// todo: the result of parse() should already have correct (polymorphic) definitions
-		List<ModuleDefinition> moduleDefinitions = createModuleDefinitions(moduleDescriptors);
-		if (!moduleDefinitions.isEmpty()) {
-			definition.setModuleDefinitions(moduleDefinitions);
-		}
-		D savedDefinition = repository.save(definition);
-		return afterSave(savedDefinition);
+		validator.validateBeforeDeploy(name, properties);
+		prepareDeployment(name, properties);
+		deploymentHandler.deploy(name);
 	}
-
 
 	@Override
-	public void validateBeforeSave(String name, String definition) {
-		Assert.hasText(name, "name cannot be blank or null");
-		D definitionFromRepo = getDefinitionRepository().findOne(name);
-		if (definitionFromRepo != null) {
-			throwDefinitionAlreadyExistsException(definitionFromRepo);
-		}
-		Assert.hasText(definition, "definition cannot be blank or null");
-		parser.parse(name, definition, definitionKind);
+	public void undeploy(String name) {
+		logger.info("Undeploying {}", name);
+
+		validator.validateBeforeUndeploy(name);
+		logger.info("deployment handler {}", deploymentHandler);
+		deploymentHandler.undeploy(name);
 	}
 
-	/**
-	 * Create a list of ModuleDefinitions given the results of parsing the definition.
-	 *
-	 * @param moduleDescriptors The list of ModuleDescriptors resulting from parsing the definition.
-	 * @return a list of ModuleDefinitions
-	 */
-	protected List<ModuleDefinition> createModuleDefinitions(List<ModuleDescriptor> moduleDescriptors) {
-		List<ModuleDefinition> moduleDefinitions = new ArrayList<ModuleDefinition>(moduleDescriptors.size());
-		for (ModuleDescriptor moduleDescriptor : moduleDescriptors) {
-			moduleDefinitions.add(moduleDescriptor.getModuleDefinition());
-		}
-		return moduleDefinitions;
+	@Override
+	public void undeployAll() {
+		deploymentHandler.undeployAll();
 	}
 
 	/**
@@ -140,85 +107,17 @@ public abstract class AbstractDeployer<D extends BaseDefinition> implements Reso
 	}
 
 	/**
-	 * Callback method that subclasses may override to get a chance to act on newly saved definitions.
-	 */
-	protected D afterSave(D savedDefinition) {
-		return savedDefinition;
-	}
-
-	protected void throwDefinitionAlreadyExistsException(D definition) {
-		throw new DefinitionAlreadyExistsException(definition.getName(), String.format(
-				"There is already a %s named '%%s'", definitionKind));
-	}
-
-	protected void throwNoSuchDefinitionException(String name) {
-		throw new NoSuchDefinitionException(name,
-				String.format("There is no %s definition named '%%s'", definitionKind));
-	}
-
-	protected void throwDefinitionNotDeployable(String name) {
-		throw new NoSuchDefinitionException(name,
-				String.format("The %s named '%%s' cannot be deployed", definitionKind));
-	}
-
-	protected void throwNoSuchDefinitionException(String name, String definitionKind) {
-		throw new NoSuchDefinitionException(name,
-				String.format("There is no %s definition named '%%s'", definitionKind));
-	}
-
-	protected void throwNotDeployedException(String name) {
-		throw new NotDeployedException(name, String.format("The %s named '%%s' is not currently deployed",
-				definitionKind));
-	}
-
-	protected void throwAlreadyDeployedException(String name) {
-		throw new AlreadyDeployedException(name,
-				String.format("The %s named '%%s' is already deployed", definitionKind));
-	}
-
-	@Override
-	public D findOne(String name) {
-		return repository.findOne(name);
-	}
-
-	@Override
-	public Iterable<D> findAll() {
-		return repository.findAll();
-	}
-
-	@Override
-	public Page<D> findAll(Pageable pageable) {
-		return repository.findAll(pageable);
-	}
-
-	@Override
-	public void deleteAll() {
-		for (D d : findAll()) {
-			delete(d.getName());
-		}
-	}
-
-	protected CrudRepository<D, String> getDefinitionRepository() {
-		return repository;
-	}
-
-	/**
-	 * Provides basic deployment behavior, whereby running state of deployed definitions is not persisted.
+	 * Prepares a deployment by persisting the deployment data (including formatted
+	 * deployment properties) and current deployment state of "deploying".
 	 *
-	 * @return the definition object for the given name
-	 * @throws NoSuchDefinitionException if there is no definition by the given name
+	 * @see org.springframework.xd.dirt.core.DeploymentUnitStatus.State#deploying
 	 */
-	protected D basicDeploy(String name, Map<String, String> properties) {
+	protected void prepareDeployment(String name, Map<String, String> properties) {
 		Assert.hasText(name, "name cannot be blank or null");
-		logger.trace("Deploying {}", name);
+		logger.trace("Preparing deployment of '{}'", name);
 
-		final D definition = getDefinitionRepository().findOne(name);
-		if (definition == null) {
-			throwNoSuchDefinitionException(name);
-		}
-		validateDeploymentProperties(definition, properties);
 		try {
-			String deploymentPath = getDeploymentPath(definition);
+			String deploymentPath = getDeploymentPath(name);
 			String statusPath = Paths.build(deploymentPath, Paths.STATUS);
 			byte[] propertyBytes = DeploymentPropertiesFormat.formatDeploymentProperties(properties).getBytes("UTF-8");
 			byte[] statusBytes = ZooKeeperUtils.mapToBytes(
@@ -228,69 +127,25 @@ public abstract class AbstractDeployer<D extends BaseDefinition> implements Reso
 					.create().forPath(deploymentPath, propertyBytes).and()
 					.create().withMode(CreateMode.EPHEMERAL).forPath(statusPath, statusBytes).and()
 					.commit();
+			logger.trace("Deployment state of '{}' set to 'deploying'", name);
 		}
 		catch (KeeperException.NodeExistsException e) {
-			throwAlreadyDeployedException(name);
+			throw new AlreadyDeployedException(name,
+					String.format("The %s named '%%s' is already deployed", definitionKind));
 		}
 		catch (Exception e) {
 			throw ZooKeeperUtils.wrapThrowable(e);
 		}
-		return definition;
 	}
-
-	/**
-	 * Validates that all deployment properties (of the form "module.<modulename>.<key>" do indeed
-	 * reference module names that belong to the stream/job definition).
-	 */
-	private void validateDeploymentProperties(D definition, Map<String, String> properties) {
-		List<ModuleDescriptor> modules = parser.parse(definition.getName(), definition.getDefinition(), definitionKind);
-		Set<String> moduleLabels = new HashSet<String>(modules.size());
-		for (ModuleDescriptor md : modules) {
-			moduleLabels.add(md.getModuleLabel());
-		}
-		for (Map.Entry<String, String> pair : properties.entrySet()) {
-			Matcher matcher = DEPLOYMENT_PROPERTY_PATTERN.matcher(pair.getKey());
-			Assert.isTrue(matcher.matches(),
-					String.format("'%s' does not match '%s'", pair.getKey(), DEPLOYMENT_PROPERTY_PATTERN));
-			String moduleName = matcher.group(1);
-			Assert.isTrue("*".equals(moduleName) || moduleLabels.contains(moduleName),
-					String.format("'%s' refers to a module that is not in the list: %s", pair.getKey(), moduleLabels));
-		}
-	}
-
-	protected abstract D createDefinition(String name, String definition);
 
 	/**
 	 * Return the ZooKeeper path used for deployment requests for the
 	 * given definition.
 	 *
-	 * @param definition definition for which to obtain path
+	 * @param name name of definition
 	 *
 	 * @return ZooKeeper path for deployment requests
 	 */
-	protected abstract String getDeploymentPath(D definition);
+	protected abstract String getDeploymentPath(String name);
 
-	@Override
-	public void validateBeforeDelete(String name) {
-		D def = getDefinitionRepository().findOne(name);
-		if (def == null) {
-			throwNoSuchDefinitionException(name);
-		}
-	}
-
-	@Override
-	public void delete(String name) {
-		D def = getDefinitionRepository().findOne(name);
-		if (def == null) {
-			throwNoSuchDefinitionException(name);
-		}
-		beforeDelete(def);
-		getDefinitionRepository().delete(def);
-	}
-
-	/**
-	 * Callback method that subclasses may override to get a chance to act on definitions that are about to be deleted.
-	 */
-	protected void beforeDelete(D definition) {
-	}
 }

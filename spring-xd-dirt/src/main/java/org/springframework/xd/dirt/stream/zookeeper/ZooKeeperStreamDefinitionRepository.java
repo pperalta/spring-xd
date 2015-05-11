@@ -35,14 +35,20 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.xd.dirt.module.ModuleDependencyRepository;
+import org.springframework.xd.dirt.module.ModuleRegistry;
+import org.springframework.xd.dirt.stream.ParsingContext;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepositoryUtils;
+import org.springframework.xd.dirt.stream.XDParser;
+import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.dirt.util.PagingUtility;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
 import org.springframework.xd.module.ModuleDefinition;
+import org.springframework.xd.module.ModuleDescriptor;
+import org.springframework.xd.module.options.ModuleOptionsMetadataResolver;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -82,11 +88,20 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 
 	private final ObjectReader objectReader = new ObjectMapper().reader(MODULE_DEFINITIONS_LIST);
 
+	private final ModuleRegistry moduleRegistry;
+
+	private final ModuleOptionsMetadataResolver moduleOptionsMetadataResolver;
+
+	private volatile XDParser parser;
+
 	@Autowired
 	public ZooKeeperStreamDefinitionRepository(ZooKeeperConnection zkConnection,
-			ModuleDependencyRepository moduleDependencyRepository) {
+			ModuleDependencyRepository moduleDependencyRepository, ModuleRegistry moduleRegistry,
+			ModuleOptionsMetadataResolver moduleOptionsMetadataResolver) {
 		this.zkConnection = zkConnection;
 		this.moduleDependencyRepository = moduleDependencyRepository;
+		this.moduleRegistry = moduleRegistry;
+		this.moduleOptionsMetadataResolver = moduleOptionsMetadataResolver;
 	}
 
 	@Override
@@ -96,6 +111,7 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 			// already connected, invoke the callback directly
 			connectionListener.onConnect(zkConnection.getClient());
 		}
+		parser = new XDStreamParser(this, moduleRegistry, moduleOptionsMetadataResolver);
 	}
 
 	@Override
@@ -117,13 +133,49 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 		return results;
 	}
 
+	/**
+	 * Save the dependencies of each module to its containing stream.
+	 *
+	 * @param streamDefinition the stream definition.
+	 */
+	private void saveDependencies(StreamDefinition streamDefinition) {
+		List<ModuleDescriptor> moduleDescriptors = parser.parse(streamDefinition.getName(),
+				streamDefinition.getDefinition(), ParsingContext.stream);
+
+		for (ModuleDescriptor moduleDescriptor : moduleDescriptors) {
+			moduleDependencyRepository.store(moduleDescriptor.getModuleName(), moduleDescriptor.getType(),
+					"stream:" + streamDefinition.getName());
+		}
+	}
+
+	/**
+	 * Delete the dependencies of each module to its containing stream.
+	 *
+	 * @param streamDefinition the stream definition.
+	 */
+	private void deleteDependencies(StreamDefinition streamDefinition) {
+		try {
+			List<ModuleDescriptor> moduleDescriptors = parser.parse(streamDefinition.getName(),
+					streamDefinition.getDefinition(), ParsingContext.stream);
+
+			for (ModuleDescriptor moduleDescriptor : moduleDescriptors) {
+				moduleDependencyRepository.delete(moduleDescriptor.getModuleName(), moduleDescriptor.getType(),
+						"stream:" + streamDefinition.getName());
+			}
+		}
+		catch (Exception e) {
+			// todo: parse error may happen if the stream refers to another non-existent stream
+			logger.warn("Could not delete dependencies for {}", streamDefinition.getName());
+		}
+	}
+
 	@Override
 	public <S extends StreamDefinition> S save(S entity) {
 		try {
 			Map<String, String> map = new HashMap<>();
 			map.put(DEFINITION_KEY, entity.getDefinition());
 
-			map.put(MODULE_DEFINITIONS_KEY, objectWriter.writeValueAsString(entity.getModuleDefinitions()));
+//			map.put(MODULE_DEFINITIONS_KEY, objectWriter.writeValueAsString(entity.getModuleDefinitions()));
 
 			CuratorFramework client = zkConnection.getClient();
 			String path = Paths.build(Paths.STREAMS, entity.getName());
@@ -136,11 +188,13 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 
 			logger.trace("Saved stream {} with properties {}", path, map);
 
-			StreamDefinitionRepositoryUtils.saveDependencies(moduleDependencyRepository, entity);
+			saveDependencies(entity);
+
+//			StreamDefinitionRepositoryUtils.saveDependencies(moduleDependencyRepository, entity);
 		}
 		catch (Exception e) {
 			// NodeExistsException indicates that we tried to create the
-			// path just after another thread/jvm successfully created it 
+			// path just after another thread/jvm successfully created it
 			ZooKeeperUtils.wrapAndThrowIgnoring(e, NodeExistsException.class);
 		}
 		return entity;
@@ -155,10 +209,10 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 			}
 			Map<String, String> map = ZooKeeperUtils.bytesToMap(bytes);
 			StreamDefinition streamDefinition = new StreamDefinition(id, map.get(DEFINITION_KEY));
-			if (map.get(MODULE_DEFINITIONS_KEY) != null) {
-				List<ModuleDefinition> moduleDefinitions = objectReader.readValue(map.get(MODULE_DEFINITIONS_KEY));
-				streamDefinition.setModuleDefinitions(moduleDefinitions);
-			}
+//			if (map.get(MODULE_DEFINITIONS_KEY) != null) {
+//				List<ModuleDefinition> moduleDefinitions = objectReader.readValue(map.get(MODULE_DEFINITIONS_KEY));
+//				streamDefinition.setModuleDefinitions(moduleDefinitions);
+//			}
 			return streamDefinition;
 		}
 		catch (Exception e) {
@@ -213,21 +267,31 @@ public class ZooKeeperStreamDefinitionRepository implements StreamDefinitionRepo
 
 	@Override
 	public void delete(String id) {
+		// the StreamDefinition has to be loaded in order to obtain
+		// its module definitions; these are used to delete dependencies
+		// via StreamDefinitionRepositoryUtils.deleteDependencies
+		StreamDefinition definition = findOne(id);
+		if (definition != null) {
+			delete(findOne(id));
+		}
+	}
+
+	@Override
+	public void delete(StreamDefinition entity) {
+		String id = entity.getName();
 		logger.trace("Deleting stream {}", id);
+
 		String path = Paths.build(Paths.STREAMS, id);
 		try {
+			deleteDependencies(entity);
 			zkConnection.getClient().delete().deletingChildrenIfNeeded().forPath(path);
 		}
 		catch (Exception e) {
 			//NoNodeException - nothing to delete
 			ZooKeeperUtils.wrapAndThrowIgnoring(e, NoNodeException.class);
 		}
-	}
 
-	@Override
-	public void delete(StreamDefinition entity) {
-		StreamDefinitionRepositoryUtils.deleteDependencies(moduleDependencyRepository, entity);
-		this.delete(entity.getName());
+//		deleteDependencies(entity);
 	}
 
 	@Override

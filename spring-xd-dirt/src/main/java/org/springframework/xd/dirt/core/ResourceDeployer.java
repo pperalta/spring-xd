@@ -15,8 +15,6 @@ package org.springframework.xd.dirt.core;
 
 import java.util.Map;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 
 /**
@@ -39,41 +37,15 @@ public interface ResourceDeployer<R extends BaseDefinition> {
 	void deploy(String name, Map<String, String> properties);
 
 	/**
-	 * @return Iterable all definitions
-	 */
-	Iterable<R> findAll();
-
-	/**
-	 * Return a slice of all definitions.
-	 */
-	Page<R> findAll(Pageable pageable);
-
-	R save(R resource);
-
-	/**
-	 * Retrieves a single Definition or null if none is found.
+	 * Un-deploy a resource (job or stream).
 	 *
-	 * @param name of the definition to find. Must not be null.
+	 * @param name name of the resource
 	 */
-	R findOne(String name);
-
-	/**
-	 * Delete the Definition using the provided name. The definition may also be {@link #undeploy(String) undeployed} as
-	 * part of that process.
-	 *
-	 * @param name the name of the definition to delete
-	 */
-	void delete(String name);
-
 	void undeploy(String name);
-
-	/**
-	 * Delete all the definitions
-	 */
-	void deleteAll();
 
 	/**
 	 * Undeploy all the deployed resources.
 	 */
 	void undeployAll();
+
 }

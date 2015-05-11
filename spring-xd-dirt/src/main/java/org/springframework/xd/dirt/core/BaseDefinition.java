@@ -26,7 +26,7 @@ import org.springframework.xd.module.ModuleDefinition;
  * Represents the base model for a data flow in the system. Every Spring XD definition is represented by at least a
  * <code>name</code (which also uniquely identifies the definition). Each definition also has a <code>definition</code>
  * property which contains a String value representing the DSL to create the respective definition.
- * 
+ *
  * @author Gunnar Hillert
  * @since 1.0
  */
@@ -42,10 +42,10 @@ public abstract class BaseDefinition implements Comparable<BaseDefinition> {
 	 */
 	private String name;
 
-	/**
-	 * The list of modules that are derived from parsing the definition
-	 */
-	private List<ModuleDefinition> moduleDefinitions = new ArrayList<ModuleDefinition>();
+//	/**
+//	 * The list of modules that are derived from parsing the definition
+//	 */
+//	private List<ModuleDefinition> moduleDefinitions = new ArrayList<ModuleDefinition>();
 
 	protected BaseDefinition() {
 		// no-arg constructor for serialization
@@ -53,7 +53,7 @@ public abstract class BaseDefinition implements Comparable<BaseDefinition> {
 
 	/**
 	 * Create a new definition. By default this will not be deployed.
-	 * 
+	 *
 	 * @param name the name
 	 * @param definition the definition
 	 */
@@ -78,13 +78,13 @@ public abstract class BaseDefinition implements Comparable<BaseDefinition> {
 		return name;
 	}
 
-	public void setModuleDefinitions(List<ModuleDefinition> moduleDefinitions) {
-		this.moduleDefinitions = moduleDefinitions;
-	}
-
-	public List<ModuleDefinition> getModuleDefinitions() {
-		return this.moduleDefinitions;
-	}
+//	public void setModuleDefinitions(List<ModuleDefinition> moduleDefinitions) {
+//		this.moduleDefinitions = moduleDefinitions;
+//	}
+//
+//	public List<ModuleDefinition> getModuleDefinitions() {
+//		return this.moduleDefinitions;
+//	}
 
 	@Override
 	public String toString() {

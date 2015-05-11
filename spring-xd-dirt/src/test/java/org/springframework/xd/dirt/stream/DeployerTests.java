@@ -28,14 +28,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import org.springframework.xd.dirt.server.singlenode.SingleNodeApplication;
 import org.springframework.xd.dirt.server.TestApplicationBootstrap;
+import org.springframework.xd.dirt.server.singlenode.SingleNodeApplication;
 import org.springframework.xd.dirt.test.SingleNodeIntegrationTestSupport;
 
 
 /**
- * Test class to validate the deployment behavior that need not be tested across transports.  
- * 
+ * Test class to validate the deployment behavior that need not be tested across transports.
+ *
  * @author Eric Bottard
  */
 public class DeployerTests {
@@ -62,49 +62,53 @@ public class DeployerTests {
 
 	@After
 	public void cleanStreams() {
-		integrationSupport.streamDeployer().deleteAll();
+		integrationSupport.deleteStream("foo");
 	}
 
 	@Test
 	public void testValidDeploymentProperties() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		Map<String, String> properties = Collections.singletonMap("module.log.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 	@Test
 	public void testValidDeploymentPropertiesUsesLabel() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | bar:log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		Map<String, String> properties = Collections.singletonMap("module.bar.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 	@Test
 	public void testInvalidDeploymentProperties() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		thrown.expect(IllegalArgumentException.class);
 		thrown.expectMessage(containsString("module.logo.count"));
 
 		Map<String, String> properties = Collections.singletonMap("module.logo.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 	@Test
 	public void testInvalidDeploymentPropertiesShouldUseLabel() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | bar: log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		thrown.expect(IllegalArgumentException.class);
 		thrown.expectMessage(containsString("module.log.count"));
 
 		Map<String, String> properties = Collections.singletonMap("module.log.count", "3");
 		integrationSupport.deployStream(testStream, properties);
+		integrationSupport.undeployAndDestroyStream(testStream);
 	}
 
 

@@ -22,6 +22,9 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.shell.core.CommandResult;
 import org.springframework.shell.core.JLineShellComponent;
 import org.springframework.xd.dirt.test.SingleNodeIntegrationTestSupport;
@@ -111,6 +114,7 @@ public class StreamCommandTemplate extends AbstractCommandTemplate {
 		assertEquals("Deployed stream '" + streamname + "'", cr.getResult());
 	}
 
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
 	/**
 	 * Destroy all streams that were created using the 'create' method. Commonly called in a @After annotated method
 	 */
@@ -118,9 +122,10 @@ public class StreamCommandTemplate extends AbstractCommandTemplate {
 		for (int s = streams.size() - 1; s >= 0; s--) {
 			String streamname = streams.get(s);
 			CommandResult cr = executeCommand("stream destroy --name " + streamname);
-			stateVerifier.waitForDestroy(streamname);
+			assertTrue("Failed to destroy stream " + streamname, stateVerifier.waitForDestroy(streamname));
 			assertTrue("Failure to destroy stream " + streamname + ".  CommandResult = " + cr.toString(),
 					cr.isSuccess());
+			logger.info("===> Stream {} destroyed");
 		}
 	}
 

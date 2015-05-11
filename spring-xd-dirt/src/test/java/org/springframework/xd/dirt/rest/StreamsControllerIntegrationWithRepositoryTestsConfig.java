@@ -38,7 +38,8 @@ public class StreamsControllerIntegrationWithRepositoryTestsConfig extends Depen
 	@Override
 	@Bean
 	public StreamDefinitionRepository streamDefinitionRepository() {
-		return new ZooKeeperStreamDefinitionRepository(zooKeeperConnection, moduleDependencyRepository());
+		return new ZooKeeperStreamDefinitionRepository(zooKeeperConnection, moduleDependencyRepository(),
+				moduleRegistry(), moduleOptionsMetadataResolver());
 	}
 
 	@Override

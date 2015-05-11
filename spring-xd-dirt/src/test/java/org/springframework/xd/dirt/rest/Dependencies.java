@@ -49,15 +49,18 @@ import org.springframework.xd.dirt.module.ModuleDependencyRepository;
 import org.springframework.xd.dirt.module.WritableModuleRegistry;
 import org.springframework.xd.dirt.module.store.ModuleMetadataRepository;
 import org.springframework.xd.dirt.module.store.ZooKeeperModuleDependencyRepository;
+import org.springframework.xd.dirt.module.support.ModuleDefinitionService;
 import org.springframework.xd.dirt.plugins.job.DistributedJobLocator;
 import org.springframework.xd.dirt.plugins.job.DistributedJobService;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessagePublisher;
 import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentMessageConsumer;
+import org.springframework.xd.dirt.stream.DefaultDeploymentValidator;
+import org.springframework.xd.dirt.stream.DeploymentValidator;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
-import org.springframework.xd.dirt.module.support.ModuleDefinitionService;
+import org.springframework.xd.dirt.stream.ParsingContext;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamRepository;
@@ -153,8 +156,8 @@ public class Dependencies {
 
 	@Bean
 	public JobDeployer jobDeployer() {
-		return new JobDeployer(zooKeeperConnection(), jobDefinitionRepository(), xdJobRepository(), parser(),
-				messageBus(), deploymentHandler());
+		return new JobDeployer(zooKeeperConnection(), parser(), jobDeploymentValidator(),
+				deploymentHandler(), messageBus());
 	}
 
 	@Bean
@@ -171,7 +174,8 @@ public class Dependencies {
 
 	@Bean
 	public StreamDefinitionRepository streamDefinitionRepository() {
-		return new ZooKeeperStreamDefinitionRepository(zooKeeperConnection(), moduleDependencyRepository());
+		return new ZooKeeperStreamDefinitionRepository(zooKeeperConnection(), moduleDependencyRepository(),
+				moduleRegistry(), moduleOptionsMetadataResolver());
 	}
 
 	@Bean
@@ -186,8 +190,8 @@ public class Dependencies {
 
 	@Bean
 	public StreamDeployer streamDeployer() {
-		return new StreamDeployer(zooKeeperConnection(), streamDefinitionRepository(), streamRepository(), parser(),
-				deploymentHandler());
+		return new StreamDeployer(zooKeeperConnection(), parser(),
+				streamDeploymentValidator(), deploymentHandler());
 	}
 
 	@Bean
@@ -258,12 +262,15 @@ public class Dependencies {
 	@Bean
 	public DeploymentMessagePublisher DeploymentMessageProducer() {
 		return new DeploymentMessagePublisher() {
-
-			DeploymentMessageConsumer consumer = new DeploymentMessageConsumer();
 			@Override
 			public void publishDeploymentMessage(DeploymentMessage deploymentMessage) {
+				DeploymentMessageConsumer consumer = new DeploymentMessageConsumer(streamDeployer(),
+						jobDeployer(), streamDefinitionRepository(), jobDefinitionRepository());
 				try {
-					consumer.consumeMessage(deploymentMessage, streamDeployer(), jobDeployer());
+					consumer.consumeMessage(deploymentMessage);
+				}
+				catch (RuntimeException e) {
+					throw e;
 				}
 				catch (Exception e) {
 					throw new RuntimeException(e);
@@ -276,14 +283,32 @@ public class Dependencies {
 	public DeploymentHandler deploymentHandler() {
 		return new DeploymentHandler() {
 			@Override
-			public void deploy(String deploymentUnitName) throws Exception {
+			public void deploy(String deploymentUnitName) {
 
 			}
 
 			@Override
-			public void undeploy(String deploymentUnitName) throws Exception {
+			public void undeploy(String deploymentUnitName) {
+
+			}
+
+			@Override
+			public void undeployAll() {
 
 			}
 		};
 	}
+
+	@Bean
+	public DeploymentValidator streamDeploymentValidator() {
+		return new DefaultDeploymentValidator(streamDefinitionRepository(), streamRepository(),
+				parser(), ParsingContext.stream);
+	}
+
+	@Bean
+	public DeploymentValidator jobDeploymentValidator() {
+		return new DefaultDeploymentValidator(jobDefinitionRepository(), xdJobRepository(),
+				parser(), ParsingContext.job);
+	}
+
 }

@@ -23,6 +23,8 @@ import java.util.Set;
 
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.xd.dirt.module.ModuleDependencyRepository;
@@ -34,7 +36,7 @@ import org.springframework.xd.module.ModuleType;
 /**
  * ZooKeeper based implementation of {@link ModuleDependencyRepository} that writes each dependency to a node, such as:
  * {@code /xd/modules/[moduletype]/[modulename]/dependencies/[target]}.
- * 
+ *
  * @author Mark Fisher
  * @author David Turanski
  */
@@ -78,8 +80,14 @@ public class ZooKeeperModuleDependencyRepository implements ModuleDependencyRepo
 		}
 	}
 
+
+
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
 	@Override
 	public void delete(String module, ModuleType type, String target) {
+		logger.info("deleting module {} of type {} for {}", module, type, target);
+
 		String path = Paths.build(MODULES_NODE, type.toString(), module, DEPENDENCIES_NODE, target);
 		try {
 			connection.getClient().delete().forPath(path);

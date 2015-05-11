@@ -15,12 +15,20 @@
  */
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,13 +39,17 @@ import org.springframework.xd.dirt.cluster.NoContainerException;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.Stream;
+import org.springframework.xd.dirt.core.StreamDeploymentsPath;
+import org.springframework.xd.dirt.module.ModuleDependencyRepository;
 import org.springframework.xd.dirt.server.admin.deployment.ContainerMatcher;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentException;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.ModuleDeploymentStatus;
 import org.springframework.xd.dirt.server.admin.deployment.StreamRuntimePropertiesProvider;
 import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
+import org.springframework.xd.module.ModuleDefinition;
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.ModuleDescriptor;
 
@@ -85,16 +97,53 @@ public class ZKStreamDeploymentHandler extends ZKDeploymentHandler {
 	@Autowired
 	private DeploymentUnitStateCalculator stateCalculator;
 
-
 	/**
-	 * Deploy the stream with the given name.
-	 * @param streamName the stream name
-	 * @throws Exception
+	 * todo
 	 */
-	public void deploy(String streamName) throws Exception {
+	@Autowired
+	private ModuleDependencyRepository moduleDependencyRepository;
+
+
+	public void deploy(String streamName) throws DeploymentException {
 		CuratorFramework client = zkConnection.getClient();
-		deployStream(client, DeploymentLoader.loadStream(client, streamName, streamFactory));
+		try {
+			Stream stream = loadStream(streamName);
+			deployStream(client, stream);
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new DeploymentException(String.format("Deployment of stream '%s' was interrupted", streamName), e);
+		}
 	}
+
+	private Stream loadStream(String streamName) throws DeploymentException {
+		try {
+			return DeploymentLoader.loadStream(zkConnection.getClient(), streamName, streamFactory);
+		}
+		catch (Exception e) {
+			throw new DeploymentException(String.format("Exception loading stream '%s'", streamName), e);
+		}
+	}
+
+//	/**
+//	 * todo
+//	 * @param stream
+//	 */
+//	private void saveModuleDependencies(Stream stream) {
+//		for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptors()) {
+//			ModuleDefinition moduleDefinition = moduleDescriptor.getModuleDefinition();
+//			moduleDependencyRepository.store(moduleDefinition.getName(), moduleDefinition.getType(),
+//					"stream:" + stream.getName());
+//		}
+//	}
+//
+//	private void deleteModuleDependencies(Stream stream) {
+//		for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptors()) {
+//			ModuleDefinition moduleDefinition = moduleDescriptor.getModuleDefinition();
+//			moduleDependencyRepository.delete(moduleDefinition.getName(), moduleDefinition.getType(),
+//					"stream:" + stream.getName());
+//		}
+//	}
 
 	/**
 	 * Issue deployment requests for the modules of the given stream.
@@ -189,5 +238,116 @@ public class ZKStreamDeploymentHandler extends ZKDeploymentHandler {
 		catch (Exception e) {
 			throw ZooKeeperUtils.wrapThrowable(e);
 		}
+	}
+
+	@Override
+	public void undeploy(String id) throws DeploymentException {
+		logger.info("Undeploying stream {}", id);
+
+		String streamDeploymentPath = Paths.build(Paths.STREAM_DEPLOYMENTS, id);
+		String streamModuleDeploymentPath = Paths.build(streamDeploymentPath, Paths.MODULES);
+		CuratorFramework client = zkConnection.getClient();
+
+		try {
+			client.setData().forPath(
+					Paths.build(Paths.STREAM_DEPLOYMENTS, id, Paths.STATUS),
+					ZooKeeperUtils.mapToBytes(new DeploymentUnitStatus(
+							DeploymentUnitStatus.State.undeploying).toMap()));
+		}
+		catch (Exception e) {
+			logger.warn("Exception while transitioning stream {} state to {}", id,
+					DeploymentUnitStatus.State.undeploying, e);
+		}
+
+		// Stream module un-deployment happens in the following steps:
+		//
+		// 1. Load the stream module deployment paths for the given stream.
+		//    These are the ephemeral nodes created by the container that
+		//    deployed the stream.
+		//
+		// 2. Load/parse the stream definition. This is used to determine
+		//    the order of the stream modules. Un-deployment should
+		//    occur in left to right (sources, processors, sinks)
+		//
+		// 3. Using the parsed stream definition, sort the list of
+		//    module deployment paths in the order in which they should
+		//    be undeployed.
+		//
+		// 4. Remove the module deployment and stream paths.
+
+		List<StreamDeploymentsPath> paths = new ArrayList<StreamDeploymentsPath>();
+		try {
+			List<String> deployments = client.getChildren().forPath(streamModuleDeploymentPath);
+			for (String deployment : deployments) {
+				paths.add(new StreamDeploymentsPath(Paths.build(streamModuleDeploymentPath, deployment)));
+			}
+		}
+		catch (Exception e) {
+			//NoNodeException - nothing to delete
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+
+		try {
+			final Stream stream = loadStream(id);
+			Comparator<StreamDeploymentsPath> pathComparator = new Comparator<StreamDeploymentsPath>() {
+				@Override
+				public int compare(StreamDeploymentsPath path0, StreamDeploymentsPath path1) {
+					int i0 = 0;
+					int i1 = 0;
+					for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptors()) {
+						if (path0.getModuleLabel().equals(moduleDescriptor.getModuleLabel())) {
+							i0 = moduleDescriptor.getIndex();
+						}
+						else if (path1.getModuleLabel().equals(moduleDescriptor.getModuleLabel())) {
+							i1 = moduleDescriptor.getIndex();
+						}
+						if (i0 > 0 && i1 > 0) {
+							break;
+						}
+					}
+					return Integer.compare(i0, i1);
+				}
+			};
+			Collections.sort(paths, pathComparator);
+		}
+		catch (Exception e) {
+			// todo: if we can't load the stream, we can't sort its modules for un-deployment
+			logger.warn("Error loading stream " + id, e);
+		}
+
+		for (StreamDeploymentsPath path : paths) {
+			try {
+				logger.trace("removing path {}", path);
+				client.delete().deletingChildrenIfNeeded().forPath(path.build());
+			}
+			catch (Exception e) {
+				ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+			}
+		}
+
+		try {
+			client.delete().deletingChildrenIfNeeded().forPath(streamDeploymentPath);
+		}
+		catch (KeeperException.NotEmptyException e) {
+			List<String> children = new ArrayList<String>();
+			try {
+				children.addAll(client.getChildren().forPath(streamModuleDeploymentPath));
+			}
+			catch (Exception ex) {
+				children.add("Could not load list of children due to " + ex);
+			}
+			throw new IllegalStateException(String.format(
+					"The following children were not deleted from %s: %s", streamModuleDeploymentPath, children), e);
+		}
+		catch (Exception e) {
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+
+		super.undeploy(id);
+	}
+
+	@Override
+	protected String getDeploymentPath() {
+		return Paths.STREAM_DEPLOYMENTS;
 	}
 }

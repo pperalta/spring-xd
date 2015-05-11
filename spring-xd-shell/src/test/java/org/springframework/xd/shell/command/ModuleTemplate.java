@@ -26,6 +26,9 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.shell.core.CommandResult;
 import org.springframework.shell.core.JLineShellComponent;
 import org.springframework.xd.module.ModuleType;
@@ -34,7 +37,7 @@ import org.springframework.xd.test.fixtures.Disposable;
 
 /**
  * Issues commands related to module composition and upload. Also remembers created modules, so that they can be cleaned up.
- * 
+ *
  * @author Eric Bottard
  */
 public class ModuleTemplate implements Disposable {
@@ -66,7 +69,10 @@ public class ModuleTemplate implements Disposable {
 		return key;
 	}
 
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
 	public boolean delete(String name, ModuleType type) {
+		logger.info("deleting module {} -> {}", name);
 		CommandResult result = shell.executeCommand(String.format("module delete %s:%s", type, name));
 		return result.isSuccess();
 	}

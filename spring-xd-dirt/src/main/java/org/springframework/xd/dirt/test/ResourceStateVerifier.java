@@ -26,9 +26,15 @@ import org.springframework.xd.dirt.core.DeploymentUnitStatus.State;
 import org.springframework.xd.store.DomainRepository;
 
 /**
- * Verifies the state of resources (job or stream) by polling repository state until the
- * resource is in the expected state or the operation times out. For use with
- * {@link org.springframework.xd.dirt.server.singlenode.SingleNodeApplication} testing.
+ * Verifies the state of resources (job or stream) by polling repository state until
+ * <ul>
+ *     <li>the resource is in the expected state</li>
+ *     <li>the operation times out</li>
+ *     <li>the executing thread is interrupted</li>
+ * </ul>
+ *
+ * For use with {@link org.springframework.xd.dirt.server.singlenode.SingleNodeApplication}
+ * testing.
  *
  * @see org.springframework.xd.dirt.test.SingleNodeIntegrationTestSupport
  * @author David Turanski
@@ -45,6 +51,7 @@ public class ResourceStateVerifier {
 	private final DomainRepository<? extends BaseDefinition, String> domainRepository;
 
 	/**
+	 * Construct a ResourceStateVerifier.
 	 *
 	 * @param deploymentStatusRepository the repository that tracks deployment status
 	 * @param domainRepository the resource definition repository
@@ -102,6 +109,7 @@ public class ResourceStateVerifier {
 			}
 			catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
+				break;
 			}
 		}
 		return exists;
@@ -122,16 +130,19 @@ public class ResourceStateVerifier {
 			}
 			catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
+				break;
 			}
 		}
-		return exists;
-
+		return !exists;
 	}
 
 	/**
 	 * Wait for the State to change to one or more expected target states.
+	 *
+	 * @param resourceName the name of the resource to return state for
+	 * @param targetStates the expected target states
 	 */
-	State waitForDeployState(String resourceName, State... targetStates) {
+	public State waitForDeployState(String resourceName, State... targetStates) {
 		DeploymentUnitStatus.State currentState = deploymentStatusRepository.getDeploymentStatus(resourceName).getState();
 		long waitTime = 0;
 		List<State> targetStateList = Arrays.asList(targetStates);
@@ -143,8 +154,10 @@ public class ResourceStateVerifier {
 			}
 			catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
+				break;
 			}
 		}
 		return currentState;
 	}
+
 }

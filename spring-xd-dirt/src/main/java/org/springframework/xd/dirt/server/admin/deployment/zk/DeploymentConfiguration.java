@@ -30,9 +30,12 @@ import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleRegistry;
 import org.springframework.xd.dirt.server.admin.deployment.DefaultDeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
+import org.springframework.xd.dirt.stream.DefaultDeploymentValidator;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.JobRepository;
+import org.springframework.xd.dirt.stream.ParsingContext;
+import org.springframework.xd.dirt.stream.StreamDefinitionMigrator;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamFactory;
@@ -102,9 +105,15 @@ public class DeploymentConfiguration {
 	}
 
 	@Bean
+	public DefaultDeploymentValidator streamDeploymentValidator() {
+		return new DefaultDeploymentValidator(streamDefinitionRepository, streamRepository,
+				parser(), ParsingContext.stream);
+	}
+
+	@Bean
 	public StreamDeployer zkStreamDeployer() {
-		return  new StreamDeployer(zkConnection, streamDefinitionRepository, streamRepository,
-				parser(), streamDeploymentHandler());
+		return new StreamDeployer(zkConnection, parser(), streamDeploymentValidator(),
+				streamDeploymentHandler());
 	}
 
 	@Bean
@@ -113,9 +122,20 @@ public class DeploymentConfiguration {
 	}
 
 	@Bean
+	public DefaultDeploymentValidator jobDeploymentValidator() {
+		return new DefaultDeploymentValidator(jobDefinitionRepository, jobRepository,
+				parser(), ParsingContext.job);
+	}
+
+	@Bean
+	public StreamDefinitionMigrator streamDefinitionMigrator() {
+		return new StreamDefinitionMigrator(zkConnection, parser(), streamDefinitionRepository);
+	}
+
+	@Bean
 	public JobDeployer zkJobDeployer() {
-		return  new JobDeployer(zkConnection, jobDefinitionRepository, jobRepository,
-				parser(), messageBus, jobDeploymentHandler());
+		return new JobDeployer(zkConnection, parser(), jobDeploymentValidator(),
+				jobDeploymentHandler(), messageBus);
 	}
 
 	@Bean

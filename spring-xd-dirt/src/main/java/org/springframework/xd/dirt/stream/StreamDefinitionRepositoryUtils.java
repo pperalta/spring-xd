@@ -26,42 +26,42 @@ import org.springframework.xd.module.ModuleDefinition;
 /**
  * Encapsulate shared functionality between implementations of StreamDefinitionRepository that can't be done using
  * inheritance
- * 
+ *
  * @author Mark Pollack
  */
 public abstract class StreamDefinitionRepositoryUtils {
 
 	/**
 	 * Save the dependencies of each module to its containing stream.
-	 * 
+	 *
 	 * @param moduleDependencyRepository finds and stores module dependencies
 	 * @param streamDefinition the stream definition.
 	 */
 	public static void saveDependencies(ModuleDependencyRepository moduleDependencyRepository,
 			StreamDefinition streamDefinition) {
-		validate(moduleDependencyRepository, streamDefinition);
-		List<ModuleDefinition> moduleDefinitions = streamDefinition.getModuleDefinitions();
-
-		for (ModuleDefinition moduleDefinition : moduleDefinitions) {
-			moduleDependencyRepository.store(moduleDefinition.getName(), moduleDefinition.getType(),
-					"stream:" + streamDefinition.getName());
-		}
+//		validate(moduleDependencyRepository, streamDefinition);
+//		List<ModuleDefinition> moduleDefinitions = streamDefinition.getModuleDefinitions();
+//
+//		for (ModuleDefinition moduleDefinition : moduleDefinitions) {
+//			moduleDependencyRepository.store(moduleDefinition.getName(), moduleDefinition.getType(),
+//					"stream:" + streamDefinition.getName());
+//		}
 	}
 
 	/**
 	 * Delete the dependencies of each module to its containing stream.
-	 * 
+	 *
 	 * @param moduleDependencyRepository deletes module dependencies
 	 * @param streamDefinition the stream definition.
 	 */
 	public static void deleteDependencies(ModuleDependencyRepository moduleDependencyRepository,
 			StreamDefinition streamDefinition) {
-		validate(moduleDependencyRepository, streamDefinition);
-		List<ModuleDefinition> moduleDefinitions = streamDefinition.getModuleDefinitions();
-		for (ModuleDefinition moduleDefinition : moduleDefinitions) {
-			moduleDependencyRepository.delete(moduleDefinition.getName(), moduleDefinition.getType(),
-					"stream:" + streamDefinition.getName());
-		}
+//		validate(moduleDependencyRepository, streamDefinition);
+//		List<ModuleDefinition> moduleDefinitions = streamDefinition.getModuleDefinitions();
+//		for (ModuleDefinition moduleDefinition : moduleDefinitions) {
+//			moduleDependencyRepository.delete(moduleDefinition.getName(), moduleDefinition.getType(),
+//					"stream:" + streamDefinition.getName());
+//		}
 	}
 
 

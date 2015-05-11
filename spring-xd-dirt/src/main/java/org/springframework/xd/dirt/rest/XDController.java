@@ -21,6 +21,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,19 +41,19 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.xd.dirt.core.BaseDefinition;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
-import org.springframework.xd.dirt.stream.DeploymentValidator;
 import org.springframework.xd.dirt.integration.bus.rabbit.NothingToDeleteException;
 import org.springframework.xd.dirt.integration.bus.rabbit.RabbitBusCleaner;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentAction;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessagePublisher;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
-import org.springframework.xd.dirt.stream.AbstractInstancePersistingDeployer;
+import org.springframework.xd.dirt.stream.DeploymentValidator;
 import org.springframework.xd.dirt.stream.BaseInstance;
 import org.springframework.xd.dirt.stream.NoSuchDefinitionException;
 import org.springframework.xd.rest.domain.DeployableResource;
 import org.springframework.xd.rest.domain.NamedResource;
 import org.springframework.xd.rest.domain.support.DeploymentPropertiesFormat;
+import org.springframework.xd.store.DomainRepository;
 
 /**
  * Base Class for XD Controllers.
@@ -65,12 +68,17 @@ import org.springframework.xd.rest.domain.support.DeploymentPropertiesFormat;
  * @author Gunnar Hillert
  */
 
-public abstract class XDController<D extends BaseDefinition, A extends
-		ResourceAssemblerSupport<D, R>, R extends NamedResource, I extends BaseInstance<D>> {
-
-	private final AbstractInstancePersistingDeployer<D, I> deployer;
+public abstract class XDController<D extends BaseDefinition,
+		A extends ResourceAssemblerSupport<D, R>,
+		R extends NamedResource,
+		I extends BaseInstance<D>> {
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
 	private final DeploymentValidator validator;
+
+	private final DomainRepository<D, String> domainRepo;
+
+	private final DomainRepository<I, String> instanceRepo;
 
 	private A resourceAssemblerSupport;
 
@@ -81,32 +89,13 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	@Autowired
 	private DeploymentMessagePublisher deploymentMessagePublisher;
 
-	/**
-	 * Data holder class for controlling how the list methods should behave.
-	 *
-	 * @author Eric Bottard
-	 */
-	public static class QueryOptions {
 
-		public static final QueryOptions NONE = new QueryOptions();
-
-		private boolean deployments;
-
-		/**
-		 * Whether to also return deployment status when listing definitions.
-		 */
-		public boolean isDeployments() {
-			return deployments;
-		}
-
-		public void setDeployments(boolean deployments) {
-			this.deployments = deployments;
-		}
-	}
-
-	protected XDController( AbstractInstancePersistingDeployer<D, I> deployer, A resourceAssemblerSupport, DeploymentUnitType deploymentUnitType) {
-		this.deployer = deployer;
-		this.validator = deployer;
+	protected XDController(DeploymentValidator validator, DomainRepository<D, String> domainRepo,
+			DomainRepository<I, String> instanceRepo, A resourceAssemblerSupport,
+			DeploymentUnitType deploymentUnitType) {
+		this.validator = validator;
+		this.domainRepo = domainRepo;
+		this.instanceRepo = instanceRepo;
 		this.resourceAssemblerSupport = resourceAssemblerSupport;
 		this.deploymentUnitType = deploymentUnitType;
 	}
@@ -119,6 +108,7 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	@RequestMapping(value = "/definitions/{name}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
 	public void delete(@PathVariable("name") String name) throws Exception {
+		logger.warn("XDController.validateBeforeDelete({})", name);
 		validator.validateBeforeDelete(name);
 		deploymentMessagePublisher.publishDeploymentMessage(new DeploymentMessage(deploymentUnitType)
 				.setUnitName(name)
@@ -143,6 +133,7 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	@RequestMapping(value = "/deployments/{name}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
 	public void undeploy(@PathVariable("name") String name) throws Exception {
+		logger.warn("XDController.validateBeforeUndeploy({})", name);
 		validator.validateBeforeUndeploy(name);
 		deploymentMessagePublisher.publishDeploymentMessage(new DeploymentMessage(deploymentUnitType)
 				.setUnitName(name)
@@ -186,7 +177,7 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	@ResponseStatus(HttpStatus.OK)
 	@ResponseBody
 	public ResourceSupport display(@PathVariable("name") String name) throws Exception {
-		final D definition = deployer.findOne(name);
+		final D definition = domainRepo.findOne(name);
 		if (definition == null) {
 			throw new NoSuchDefinitionException(name, "There is no definition named '%s'");
 		}
@@ -201,7 +192,7 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	// PagedResourcesAssemblerArgumentResolver works
 	// subclasses should override and make public (or delegate)
 	protected PagedResources<R> listValues(Pageable pageable, PagedResourcesAssembler<D> assembler) {
-		Page<D> page = deployer.findAll(pageable);
+		Page<D> page = domainRepo.findAll(pageable);
 		PagedResources<R> result = assembler.toResource(page, resourceAssemblerSupport);
 		if (page.getNumberOfElements() > 0) {
 			enhanceWithDeployments(page, result);
@@ -214,36 +205,47 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	 * the operation is not supported.
 	 */
 	private void enhanceWithDeployments(Page<D> page, PagedResources<R> result) {
-		if (deployer instanceof AbstractInstancePersistingDeployer) {
-			@SuppressWarnings("unchecked")
-			AbstractInstancePersistingDeployer<D, BaseInstance<D>> ipDeployer = (AbstractInstancePersistingDeployer<D, BaseInstance<D>>) deployer;
-			D first = page.getContent().get(0);
-			D last = page.getContent().get(page.getNumberOfElements() - 1);
-			Iterator<BaseInstance<D>> deployedInstances = ipDeployer.deploymentInfo(first.getName(), last.getName()).iterator();
-			BaseInstance<D> instance = deployedInstances.hasNext() ? deployedInstances.next() : null;
+		D first = page.getContent().get(0);
+		D last = page.getContent().get(page.getNumberOfElements() - 1);
+		Iterator<I> deployedInstances = deploymentInfo(first.getName(), last.getName()).iterator();
+		I instance = deployedInstances.hasNext() ? deployedInstances.next() : null;
 
-			// There are >= more definitions than there are instances, and they're both sorted
-			for (R definitionResource : result) {
-				String instanceName = (instance != null) ? instance.getDefinition().getName() : null;
-				if (definitionResource.getName().equals(instanceName)) {
-					((DeployableResource) definitionResource).setStatus(instance.getStatus().getState().toString());
-					instance = deployedInstances.hasNext() ? deployedInstances.next() : null;
-				}
-				else {
-					((DeployableResource) definitionResource).setStatus(DeploymentUnitStatus.State.undeployed.toString());
-				}
+		// There are >= more definitions than there are instances, and they're both sorted
+		for (R definitionResource : result) {
+			String instanceName = (instance != null) ? instance.getDefinition().getName() : null;
+			if (definitionResource.getName().equals(instanceName)) {
+				((DeployableResource) definitionResource).setStatus(instance.getStatus().getState().toString());
+				instance = deployedInstances.hasNext() ? deployedInstances.next() : null;
 			}
-			if (deployedInstances.hasNext()) {
-				final List<String> uninspectedInstanceNames = new ArrayList<String>();
-
-				while (deployedInstances.hasNext()) {
-					final BaseInstance<D> uninspectedInstance = deployedInstances.next();
-					uninspectedInstanceNames.add(uninspectedInstance.getDefinition().getName());
-				}
-				throw new IllegalStateException("Not all instances were looked at: "
-						+ StringUtils.collectionToCommaDelimitedString(uninspectedInstanceNames));
+			else {
+				((DeployableResource) definitionResource).setStatus(DeploymentUnitStatus.State.undeployed.toString());
 			}
 		}
+		if (deployedInstances.hasNext()) {
+			final List<String> uninspectedInstanceNames = new ArrayList<String>();
+
+			while (deployedInstances.hasNext()) {
+				final BaseInstance<D> uninspectedInstance = deployedInstances.next();
+				uninspectedInstanceNames.add(uninspectedInstance.getDefinition().getName());
+			}
+			throw new IllegalStateException("Not all instances were looked at: "
+					+ StringUtils.collectionToCommaDelimitedString(uninspectedInstanceNames));
+		}
+	}
+
+
+	/**
+	 * Query deployment information about definitions whose ids range from {@code first} to {@code last}.
+	 */
+	public Iterable<I> deploymentInfo(String first, String last) {
+		return instanceRepo.findAllInRange(first, true, last, true);
+	}
+
+	/**
+	 * Query deployment information about the definition whose ID is provided.
+	 */
+	public I deploymentInfo(String id) {
+		return instanceRepo.findOne(id);
 	}
 
 	/**
@@ -265,18 +267,13 @@ public abstract class XDController<D extends BaseDefinition, A extends
 	}
 
 	private ResourceSupport enhanceWithDeployment(D definition, R resource) {
-		if (deployer instanceof AbstractInstancePersistingDeployer) {
-			@SuppressWarnings("unchecked")
-			AbstractInstancePersistingDeployer<D, BaseInstance<D>> ipDeployer = (AbstractInstancePersistingDeployer<D, BaseInstance<D>>) deployer;
-			BaseInstance<D> deployedInstance = ipDeployer.deploymentInfo(definition.getName());
-			String status = (deployedInstance != null) ? deployedInstance.getStatus().getState().toString()
-					: DeploymentUnitStatus.State.undeployed.toString();
-			((DeployableResource) resource).setStatus(status);
-		}
+		I deployedInstance = deploymentInfo(definition.getName());
+		String status = (deployedInstance != null)
+				? deployedInstance.getStatus().getState().toString()
+				: DeploymentUnitStatus.State.undeployed.toString();
+		((DeployableResource) resource).setStatus(status);
 		return resource;
 	}
-
-	protected abstract D createDefinition(String name, String definition);
 
 	protected Map<String, List<String>> cleanRabbitBus(String stream, String adminUri, String user, String pw,
 			String vhost, String busPrefix, boolean isJob) {
