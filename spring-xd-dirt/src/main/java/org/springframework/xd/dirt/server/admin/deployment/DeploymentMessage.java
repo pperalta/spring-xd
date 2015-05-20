@@ -17,6 +17,7 @@ package org.springframework.xd.dirt.server.admin.deployment;
 
 import java.lang.String;
 import java.util.Map;
+import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
@@ -27,6 +28,11 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY)
 public class DeploymentMessage {
+
+	/**
+	 * String representation of UUID for this request.
+	 */
+	private String requestId;
 
 	/**
 	 * Deployment unit type for the unit
@@ -57,7 +63,12 @@ public class DeploymentMessage {
 	public DeploymentMessage() {}
 
 	public DeploymentMessage(DeploymentUnitType deploymentUnitType) {
+		this.requestId = UUID.randomUUID().toString();
 		this.deploymentUnitType = deploymentUnitType;
+	}
+
+	public String getRequestId() {
+		return requestId;
 	}
 
 	public String getUnitName() {
@@ -78,6 +89,11 @@ public class DeploymentMessage {
 
 	public DeploymentUnitType getDeploymentUnitType() {
 		return deploymentUnitType;
+	}
+
+	public DeploymentMessage setRequestId(String requestId) {
+		this.requestId = requestId;
+		return this;
 	}
 
 	public DeploymentMessage setUnitName(String unitName) {

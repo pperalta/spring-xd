@@ -134,6 +134,14 @@ public class DeploymentQueue implements InitializingBean, DisposableBean {
 		return distributedQueue;
 	}
 
+	/**
+	 * todo
+	 * @return
+	 */
+	public CuratorFramework getClient() {
+		return client;
+	}
+
 	@Override
 	public void destroy() throws Exception {
 		this.distributedQueue.close();

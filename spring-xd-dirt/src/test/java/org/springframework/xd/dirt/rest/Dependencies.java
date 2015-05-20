@@ -261,13 +261,19 @@ public class Dependencies {
 
 			DeploymentMessageConsumer consumer = new DeploymentMessageConsumer();
 			@Override
-			public void publishDeploymentMessage(DeploymentMessage deploymentMessage) {
+			public void publish(DeploymentMessage deploymentMessage) {
 				try {
 					consumer.consumeMessage(deploymentMessage, streamDeployer(), jobDeployer());
 				}
 				catch (Exception e) {
 					throw new RuntimeException(e);
 				}
+			}
+
+			@Override
+			public void poll(DeploymentMessage message) {
+				// todo: this is skipping the wait for message processing; review
+				publish(message);
 			}
 		};
 	}

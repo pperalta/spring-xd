@@ -18,13 +18,14 @@ package org.springframework.xd.dirt.server.admin.deployment.zk;
 
 import java.util.Collections;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.queue.QueueConsumer;
 import org.apache.curator.framework.state.ConnectionState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentAction;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
@@ -32,6 +33,9 @@ import org.springframework.xd.dirt.stream.JobDefinition;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.dirt.zookeeper.Paths;
+import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
+import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
 
 /**
  * Consumer for {@link org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage}
@@ -42,13 +46,16 @@ import org.springframework.xd.dirt.stream.StreamDeployer;
  */
 public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessage> {
 
-	private static final Log logger = LogFactory.getLog(DeploymentMessageConsumer.class);
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
 	@Autowired
 	private StreamDeployer streamDeployer;
 
 	@Autowired
 	private JobDeployer jobDeployer;
+
+	@Autowired
+	private ZooKeeperConnection zkConnection;
 
 	// for testing only
 	public void consumeMessage(DeploymentMessage message, StreamDeployer streamDeployer, JobDeployer jobDeployer) throws Exception {
@@ -79,41 +86,65 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	 * Processes the deployment message based on the deployment action.
 	 *
 	 * @param deployer the deployer to use for processing
-	 * @param deploymentMessage the deployment message
+	 * @param message the deployment message
 	 */
 	@SuppressWarnings({"rawtypes", "unchecked"})
-	private void processDeploymentMessage(ResourceDeployer deployer, DeploymentMessage deploymentMessage) {
-		DeploymentAction deploymentAction = deploymentMessage.getDeploymentAction();
-		String name = deploymentMessage.getUnitName();
-		switch (deploymentAction) {
-			case create:
-			case createAndDeploy: {
-				if (deployer instanceof StreamDeployer) {
-					deployer.save(new StreamDefinition(name, deploymentMessage.getDefinition()));
+	private void processDeploymentMessage(ResourceDeployer deployer, DeploymentMessage message) {
+		DeploymentAction deploymentAction = message.getDeploymentAction();
+		String name = message.getUnitName();
+		String errorDesc = null;
+
+		try {
+			switch (deploymentAction) {
+				case create:
+				case createAndDeploy: {
+					if (deployer instanceof StreamDeployer) {
+						deployer.save(new StreamDefinition(name, message.getDefinition()));
+					}
+					else if (deployer instanceof JobDeployer) {
+						deployer.save(new JobDefinition(name, message.getDefinition()));
+					}
+					if (DeploymentAction.createAndDeploy.equals(deploymentAction)) {
+						deployer.deploy(name, Collections.<String, String>emptyMap());
+					}
+					break;
 				}
-				else if (deployer instanceof JobDeployer) {
-					deployer.save(new JobDefinition(name, deploymentMessage.getDefinition()));
-				}
-				if (DeploymentAction.createAndDeploy.equals(deploymentAction)) {
-					deployer.deploy(name, Collections.<String, String>emptyMap());
-				}
-				break;
+				case deploy:
+					deployer.deploy(name, message.getDeploymentProperties());
+					break;
+				case undeploy:
+					deployer.undeploy(name);
+					break;
+				case undeployAll:
+					deployer.undeployAll();
+					break;
+				case destroy:
+					deployer.delete(name);
+					break;
+				case destroyAll:
+					deployer.deleteAll();
+					break;
 			}
-			case deploy:
-				deployer.deploy(name, deploymentMessage.getDeploymentProperties());
-				break;
-			case undeploy:
-				deployer.undeploy(name);
-				break;
-			case undeployAll:
-				deployer.undeployAll();
-				break;
-			case destroy:
-				deployer.delete(name);
-				break;
-			case destroyAll:
-				deployer.deleteAll();
-				break;
+		}
+		catch (Exception e) {
+			errorDesc = ZooKeeperUtils.getStackTrace(e);
+		}
+
+		try {
+			String requestId = message.getRequestId();
+			if (StringUtils.hasText(requestId)) {
+				logger.info("Processed deployment request " + requestId);
+				String resultPath = Paths.build(Paths.DEPLOYMENTS, Paths.RESPONSES, requestId,
+						errorDesc == null
+								? ZKDeploymentMessagePublisher.SUCCESS
+								: ZKDeploymentMessagePublisher.ERROR);
+				logger.info("creating result path {}", resultPath);
+				zkConnection.getClient().create().forPath(resultPath,
+						errorDesc == null ? null : errorDesc.getBytes());
+			}
+		}
+		catch (Exception e) {
+			logger.info("Could not publish response to deployment message", e);
 		}
 	}
 

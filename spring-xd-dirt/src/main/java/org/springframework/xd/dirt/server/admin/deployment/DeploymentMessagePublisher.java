@@ -23,10 +23,14 @@ package org.springframework.xd.dirt.server.admin.deployment;
 public interface DeploymentMessagePublisher {
 
 	/**
-	 * Publish deployment message.
+	 * Publish deployment message. TODO JAVADOC
 	 *
-	 * @param deploymentMessage the deployment message
+	 * @param message the deployment message
 	 */
-	public void publishDeploymentMessage(DeploymentMessage deploymentMessage);
+	void publish(DeploymentMessage message);
+
+	void poll(DeploymentMessage message);
+
+
 
 }
