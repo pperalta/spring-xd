@@ -32,6 +32,7 @@ import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleRegistry;
 import org.springframework.xd.dirt.server.admin.deployment.DefaultDeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
+import org.springframework.xd.dirt.server.admin.deployment.ReceptorDeploymentHandler;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.JobRepository;
@@ -106,7 +107,13 @@ public class DeploymentConfiguration {
 	@Bean
 	public StreamDeployer zkStreamDeployer() {
 		return  new StreamDeployer(zkConnection, streamDefinitionRepository, streamRepository,
-				parser(), streamDeploymentHandler());
+//				parser(), streamDeploymentHandler());
+				parser(), receptorDeploymentHandler());
+	}
+
+	@Bean
+	public ReceptorDeploymentHandler receptorDeploymentHandler() {
+		return new ReceptorDeploymentHandler();
 	}
 
 	@Bean
