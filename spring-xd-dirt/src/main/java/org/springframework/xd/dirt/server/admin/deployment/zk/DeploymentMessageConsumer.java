@@ -29,13 +29,18 @@ import org.springframework.util.StringUtils;
 import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentAction;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.JobDefinition;
+import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
+import org.springframework.xd.dirt.stream.NotDeployedException;
 import org.springframework.xd.dirt.stream.StreamDefinition;
+import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
+import org.springframework.xd.store.DomainRepository;
 
 /**
  * Consumer for {@link org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage}
@@ -57,58 +62,51 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	@Autowired
 	private ZooKeeperConnection zkConnection;
 
-	// todo: for testing only; this will be removed eventually
-	public void consumeMessage(DeploymentMessage message, StreamDeployer streamDeployer, JobDeployer jobDeployer) throws Exception {
-		this.streamDeployer = streamDeployer;
-		this.jobDeployer = jobDeployer;
-		this.consumeMessage(message);
-	}
+	@Autowired
+	private StreamDefinitionRepository streamRepository;
+
+	@Autowired
+	private JobDefinitionRepository jobRepository;
+
+//	// todo: for testing only; this will be removed eventually
+//	public void consumeMessage(DeploymentMessage message, StreamDeployer streamDeployer, JobDeployer jobDeployer) throws Exception {
+//		this.streamDeployer = streamDeployer;
+//		this.jobDeployer = jobDeployer;
+//		this.consumeMessage(message);
+//	}
 
 	/**
 	 * Consume the deployment message and delegate to the deployer.
 	 *
-	 * @param deploymentMessage the deployment message
+	 * @param message the deployment message
 	 * @throws Exception
 	 */
 	@Override
-	public void consumeMessage(DeploymentMessage deploymentMessage) throws Exception {
-		switch (deploymentMessage.getDeploymentUnitType()) {
-			case Stream:
-				processDeploymentMessage(streamDeployer, deploymentMessage);
-				break;
-			case Job:
-				processDeploymentMessage(jobDeployer, deploymentMessage);
-				break;
-		}
-	}
-
-	/**
-	 * Processes the deployment message based on the deployment action.
-	 *
-	 * @param deployer the deployer to use for processing
-	 * @param message the deployment message
-	 */
-	@SuppressWarnings({"rawtypes", "unchecked"})
-	private void processDeploymentMessage(ResourceDeployer deployer, DeploymentMessage message) {
-		DeploymentAction deploymentAction = message.getDeploymentAction();
+	public void consumeMessage(DeploymentMessage message) throws Exception {
+		DeploymentUnitType type = message.getDeploymentUnitType();
+		DeploymentAction action = message.getDeploymentAction();
+		DomainRepository<?, String> repository = type == DeploymentUnitType.Job ? jobRepository : streamRepository;
+		ResourceDeployer deployer = type == DeploymentUnitType.Job ? jobDeployer : streamDeployer;
 		String name = message.getUnitName();
 		String errorDesc = null;
 
 		try {
-			switch (deploymentAction) {
+			switch (action) {
 				case create:
 				case createAndDeploy: {
-					if (deployer instanceof StreamDeployer) {
-						deployer.save(new StreamDefinition(name, message.getDefinition()));
+					switch (type) {
+						case Stream:
+							streamRepository.save(new StreamDefinition(name, message.getDefinition()));
+							break;
+						case Job:
+							jobRepository.save(new JobDefinition(name, message.getDefinition()));
+							break;
 					}
-					else if (deployer instanceof JobDeployer) {
-						deployer.save(new JobDefinition(name, message.getDefinition()));
-					}
-					if (DeploymentAction.createAndDeploy.equals(deploymentAction)) {
-						deployer.deploy(name, Collections.<String, String>emptyMap());
-					}
-					break;
 				}
+				if (DeploymentAction.createAndDeploy == action) {
+					deployer.deploy(name, Collections.<String, String>emptyMap());
+				}
+				break;
 				case deploy:
 					deployer.deploy(name, message.getDeploymentProperties());
 					break;
@@ -119,10 +117,17 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 					deployer.undeployAll();
 					break;
 				case destroy:
-					deployer.delete(name);
+					try {
+						deployer.undeploy(name);
+					}
+					catch (NotDeployedException e) {
+						// ignore
+					}
+					repository.delete(name);
 					break;
 				case destroyAll:
-					deployer.deleteAll();
+					deployer.undeployAll();
+					repository.deleteAll();
 					break;
 			}
 		}
@@ -133,7 +138,6 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 		finally {
 			writeResponse(message, errorDesc);
 		}
-
 	}
 
 	/**
@@ -164,6 +168,6 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 
 	@Override
 	public void stateChanged(CuratorFramework client, ConnectionState newState) {
-		logger.debug("Deployment Queue consumer state changed: " + newState);
+		logger.trace("Deployment Queue consumer state changed: " + newState);
 	}
 }

@@ -15,6 +15,8 @@
  */
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.autoconfigure.AuditAutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -24,22 +26,33 @@ import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoDataAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 import org.springframework.xd.dirt.cluster.AdminAttributes;
 import org.springframework.xd.dirt.container.store.AdminRepository;
 import org.springframework.xd.dirt.container.store.ZooKeeperAdminRepository;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleRegistry;
 import org.springframework.xd.dirt.server.admin.deployment.DefaultDeploymentUnitStateCalculator;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
+import org.springframework.xd.dirt.server.admin.deployment.JobDeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
+import org.springframework.xd.dirt.stream.AlreadyDeployedException;
+import org.springframework.xd.dirt.stream.DefinitionAlreadyExistsException;
+import org.springframework.xd.dirt.stream.DeploymentValidator;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.JobRepository;
+import org.springframework.xd.dirt.stream.NoSuchDefinitionException;
+import org.springframework.xd.dirt.stream.NotDeployedException;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.stream.XDStreamParser;
+import org.springframework.xd.dirt.stream.ZooKeeperResourceDeployer;
 import org.springframework.xd.dirt.util.RuntimeUtils;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.module.options.ModuleOptionsMetadataResolver;
@@ -94,30 +107,57 @@ public class DeploymentConfiguration {
 	}
 
 	@Bean
+	public StreamDeploymentStrategy streamDeploymentStrategy() {
+		return new StreamDeploymentStrategy();
+	}
+
+	@Bean
+	JobDeploymentStrategy jobDeploymentStrategy() {
+		return new JobDeploymentStrategy();
+	}
+
+	@Bean
 	public DeploymentUnitStateCalculator deploymentUnitStateCalculator() {
 		return new DefaultDeploymentUnitStateCalculator();
 	}
 
 	@Bean
-	public ZKStreamDeploymentHandler streamDeploymentHandler() {
-		return new ZKStreamDeploymentHandler();
+	@Scope("prototype")
+	ResourceDeployer resourceDeployer(DeploymentStrategy strategy) {
+		return new ZooKeeperResourceDeployer(strategy);
 	}
 
 	@Bean
 	public StreamDeployer zkStreamDeployer() {
-		return  new StreamDeployer(zkConnection, streamDefinitionRepository, streamRepository,
-				parser(), streamDeploymentHandler());
-	}
-
-	@Bean
-	public ZKJobDeploymentHandler jobDeploymentHandler() {
-		return new ZKJobDeploymentHandler();
+		return new StreamDeployer(resourceDeployer(streamDeploymentStrategy()));
 	}
 
 	@Bean
 	public JobDeployer zkJobDeployer() {
-		return  new JobDeployer(zkConnection, jobDefinitionRepository, jobRepository,
-				parser(), messageBus, jobDeploymentHandler());
+		return new JobDeployer(resourceDeployer(jobDeploymentStrategy()));
+	}
+
+	@Bean
+	@Deprecated
+	// todo: revisit this
+	public DeploymentValidator stubValidator() {
+		return new DeploymentValidator() {
+			@Override
+			public void validateBeforeSave(String name, String definition) throws DefinitionAlreadyExistsException {
+			}
+
+			@Override
+			public void validateBeforeDeploy(String name, Map<String, String> properties) throws AlreadyDeployedException, DefinitionAlreadyExistsException {
+			}
+
+			@Override
+			public void validateBeforeUndeploy(String name) throws NoSuchDefinitionException, NotDeployedException {
+			}
+
+			@Override
+			public void validateBeforeDelete(String name) throws NoSuchDefinitionException {
+			}
+		};
 	}
 
 	@Bean

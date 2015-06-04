@@ -16,6 +16,7 @@
 
 package org.springframework.xd.dirt.core;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -43,6 +44,8 @@ public interface DeploymentUnit {
 	 * @return list of modules
 	 */
 	List<ModuleDescriptor> getModuleDescriptors();
+
+	Iterator<ModuleDescriptor> getDeploymentOrderIterator();
 
 	/**
 	 * Properties used to indicate deployment information for this deployment unit.

@@ -17,6 +17,7 @@
 package org.springframework.xd.dirt.core;
 
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -82,6 +83,11 @@ public class Job implements DeploymentUnit {
 	@Override
 	public List<ModuleDescriptor> getModuleDescriptors() {
 		return Collections.singletonList(descriptor);
+	}
+
+	@Override
+	public Iterator<ModuleDescriptor> getDeploymentOrderIterator() {
+		return getModuleDescriptors().iterator();
 	}
 
 	/**

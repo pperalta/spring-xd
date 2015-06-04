@@ -25,8 +25,15 @@ import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.util.Assert;
+import org.springframework.xd.dirt.core.DeploymentUnitStatus;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.JobDeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.zk.SupervisorElectedEvent;
+import org.springframework.xd.dirt.server.admin.deployment.zk.SupervisorElectionListener;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.module.ModuleDescriptor;
@@ -37,66 +44,105 @@ import org.springframework.xd.module.ModuleDescriptor;
  * @author Ilayaperumal Gopinathan
  * @author Gunnar Hillert
  */
-public class JobDeployer extends AbstractInstancePersistingDeployer<JobDefinition, Job> implements DisposableBean {
+//public class JobDeployer extends AbstractInstancePersistingDeployer<JobDefinition, Job> implements DisposableBean {
+public class JobDeployer implements ResourceDeployer, SupervisorElectionListener {
 
-	private final String JOB_CHANNEL_PREFIX = "job:";
+	private final ResourceDeployer deployer;
 
-	private final MessageBus messageBus;
-
-	private final ConcurrentMap<String, MessageChannel> jobChannels = new ConcurrentHashMap<String, MessageChannel>();
-
-	public JobDeployer(ZooKeeperConnection zkConnection, JobDefinitionRepository definitionRepository,
-			JobRepository instanceRepository, XDParser parser, MessageBus messageBus,
-			DeploymentHandler deploymentHandler) {
-		super(zkConnection, definitionRepository, instanceRepository, parser, deploymentHandler, job);
-		Assert.notNull(messageBus, "MessageBus must not be null");
-		this.messageBus = messageBus;
+	public JobDeployer(ResourceDeployer deployer) {
+		this.deployer = deployer;
 	}
 
 	@Override
-	protected Job makeInstance(JobDefinition definition) {
-		return new Job(definition);
+	public void deploy(String name, Map<String, String> properties) {
+		deployer.deploy(name, properties);
 	}
+
+	@Override
+	public void undeploy(String name) {
+		deployer.undeploy(name);
+	}
+
+	@Override
+	public void undeployAll() {
+		deployer.undeployAll();
+	}
+
+	@Override
+	public DeploymentUnitStatus getDeploymentStatus(String name) {
+		return deployer.getDeploymentStatus(name);
+	}
+
+	@Override
+	public void onSupervisorElected(SupervisorElectedEvent event) throws Exception {
+		if (this.deployer instanceof SupervisorElectionListener) {
+			((SupervisorElectionListener) this.deployer).onSupervisorElected(event);
+		}
+	}
+
+//	private final String JOB_CHANNEL_PREFIX = "job:";
+//
+//	private final MessageBus messageBus;
+//
+//	private final ConcurrentMap<String, MessageChannel> jobChannels = new ConcurrentHashMap<String, MessageChannel>();
+//
+//	public JobDeployer(ZooKeeperConnection zkConnection, JobDefinitionRepository definitionRepository,
+//			JobRepository instanceRepository, XDParser parser, MessageBus messageBus,
+//			DeploymentHandler deploymentHandler) {
+//		super(zkConnection, definitionRepository, instanceRepository, parser, deploymentHandler, job);
+//		Assert.notNull(messageBus, "MessageBus must not be null");
+//		this.messageBus = messageBus;
+//	}
+//
+//	@Override
+//	protected Job makeInstance(JobDefinition definition) {
+//		return new Job(definition);
+//	}
+//
 
 	public void launch(String name, String jobParameters) {
-		MessageChannel channel = jobChannels.get(name);
-		if (channel == null) {
-			jobChannels.putIfAbsent(name, new DirectChannel());
-			channel = jobChannels.get(name);
-			messageBus.bindProducer(JOB_CHANNEL_PREFIX + name, channel, null);
-		}
-		// Double check so that user gets an informative error message
-		JobDefinition job = getDefinitionRepository().findOne(name);
-		if (job == null) {
-			throwNoSuchDefinitionException(name);
-		}
-		if (instanceRepository.findOne(name) == null) {
-			throwNotDeployedException(name);
-		}
-		// todo: is this Assert necessary? if not we can remove the parser dependency and parse method
-		Assert.isTrue(parse(name, job.getDefinition()).size() == 1, "Expecting only a single module");
-		channel.send(MessageBuilder.withPayload(jobParameters != null ? jobParameters : "").build());
+		throw new UnsupportedOperationException();
 	}
 
-	@Override
-	protected JobDefinition createDefinition(String name, String definition) {
-		return new JobDefinition(name, definition);
-	}
-
-	@Override
-	protected String getDeploymentPath(JobDefinition definition) {
-		return Paths.build(Paths.JOB_DEPLOYMENTS, definition.getName());
-	}
-
-	private List<ModuleDescriptor> parse(String name, String definition) {
-		return parser.parse(name, definition, definitionKind);
-	}
-
-	@Override
-	public void destroy() throws Exception {
-		for (Map.Entry<String, MessageChannel> entry : jobChannels.entrySet()) {
-			messageBus.unbindProducer(JOB_CHANNEL_PREFIX + entry.getKey(), entry.getValue());
-		}
-	}
+//	public void launch(String name, String jobParameters) {
+//		MessageChannel channel = jobChannels.get(name);
+//		if (channel == null) {
+//			jobChannels.putIfAbsent(name, new DirectChannel());
+//			channel = jobChannels.get(name);
+//			messageBus.bindProducer(JOB_CHANNEL_PREFIX + name, channel, null);
+//		}
+//		// Double check so that user gets an informative error message
+//		JobDefinition job = getDefinitionRepository().findOne(name);
+//		if (job == null) {
+//			throwNoSuchDefinitionException(name);
+//		}
+//		if (instanceRepository.findOne(name) == null) {
+//			throwNotDeployedException(name);
+//		}
+//		// todo: is this Assert necessary? if not we can remove the parser dependency and parse method
+//		Assert.isTrue(parse(name, job.getDefinition()).size() == 1, "Expecting only a single module");
+//		channel.send(MessageBuilder.withPayload(jobParameters != null ? jobParameters : "").build());
+//	}
+//
+//	@Override
+//	protected JobDefinition createDefinition(String name, String definition) {
+//		return new JobDefinition(name, definition);
+//	}
+//
+//	@Override
+//	protected String getDeploymentPath(JobDefinition definition) {
+//		return Paths.build(Paths.JOB_DEPLOYMENTS, definition.getName());
+//	}
+//
+//	private List<ModuleDescriptor> parse(String name, String definition) {
+//		return parser.parse(name, definition, definitionKind);
+//	}
+//
+//	@Override
+//	public void destroy() throws Exception {
+//		for (Map.Entry<String, MessageChannel> entry : jobChannels.entrySet()) {
+//			messageBus.unbindProducer(JOB_CHANNEL_PREFIX + entry.getKey(), entry.getValue());
+//		}
+//	}
 
 }

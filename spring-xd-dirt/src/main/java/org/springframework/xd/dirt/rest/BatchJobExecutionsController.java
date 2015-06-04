@@ -140,7 +140,9 @@ public class BatchJobExecutionsController extends AbstractBatchJobsController {
 	@RequestMapping(value = "", method = RequestMethod.POST, params = "jobname")
 	@ResponseStatus(HttpStatus.CREATED)
 	public void launchJob(@RequestParam("jobname") String name, @RequestParam(required = false) String jobParameters) {
-		jobDeployer.launch(name, jobParameters);
+//		jobDeployer.launch(name, jobParameters);
+		// todo: fix
+		throw new UnsupportedOperationException();
 	}
 
 
@@ -310,7 +312,8 @@ public class BatchJobExecutionsController extends AbstractBatchJobsController {
 
 		final String jobParametersAsString = expandedJobParametersConverter
 				.getJobParametersAsString(jobParameters, true);
-		jobDeployer.launch(lastInstance.getJobName(), jobParametersAsString);
+		// todo
+//		jobDeployer.launch(lastInstance.getJobName(), jobParametersAsString);
 	}
 
 	/**

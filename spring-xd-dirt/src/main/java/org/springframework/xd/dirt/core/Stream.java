@@ -104,6 +104,7 @@ public class Stream implements DeploymentUnit {
 	 *
 	 * @return iterator that iterates over the modules in deployment order
 	 */
+	@Override
 	public Iterator<ModuleDescriptor> getDeploymentOrderIterator() {
 		return descriptors.descendingIterator();
 	}

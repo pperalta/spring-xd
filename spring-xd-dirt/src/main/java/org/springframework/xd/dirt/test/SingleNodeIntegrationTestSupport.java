@@ -22,6 +22,7 @@ import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 
 import org.springframework.util.Assert;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus.State;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.integration.bus.MessageBusSupport;
 import org.springframework.xd.dirt.module.DelegatingModuleRegistry;
@@ -185,8 +186,11 @@ public class SingleNodeIntegrationTestSupport {
 	 * @return true if the operation succeeded.
 	 */
 	public final boolean createAndDeployStream(StreamDefinition definition) {
-		streamDeployer.save(definition);
-		return waitForDeploy(definition);
+		// todo: fix
+		throw new UnsupportedOperationException();
+
+//		streamDeployer.save(definition);
+//		return waitForDeploy(definition);
 	}
 
 	/**
@@ -204,9 +208,12 @@ public class SingleNodeIntegrationTestSupport {
 	 * @return true if the operation succeeded
 	 */
 	public final boolean undeployAndDestroyStream(StreamDefinition definition) {
-		boolean result = waitForUndeploy(definition);
-		streamDeployer.delete(definition.getName());
-		return result;
+		// todo: fix
+		throw new UnsupportedOperationException();
+
+//		boolean result = waitForUndeploy(definition);
+//		streamDeployer.delete(definition.getName());
+//		return result;
 	}
 
 	/**
@@ -214,7 +221,10 @@ public class SingleNodeIntegrationTestSupport {
 	 * @param name  the stream name
 	 */
 	public final void deleteStream(String name) {
-		streamDeployer.delete(name);
+//		streamDeployer.delete(name);
+		// todo: fix
+		throw new UnsupportedOperationException();
+
 	}
 
 	/**

@@ -121,7 +121,7 @@ public class ModuleDeploymentWriter {
 	 * @throws NoContainerException if there are no containers that match the criteria
 	 *                              for module deployment
 	 */
-	protected Collection<ModuleDeploymentStatus> writeDeployment(ModuleDescriptor moduleDescriptor,
+	public Collection<ModuleDeploymentStatus> writeDeployment(ModuleDescriptor moduleDescriptor,
 			ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> provider,
 			Collection<Container> containers)
 			throws InterruptedException, NoContainerException {

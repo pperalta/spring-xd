@@ -22,13 +22,13 @@ import org.springframework.xd.dirt.stream.StreamDefinition;
 /**
  * Interface for XD Resource Services.
  *
- * @param <R> the kind of resource to deploy (<i>e.g.</i> {@link StreamDefinition})
  *
  * @author David Turanski
  * @author Gunnar Hillert
  * @author Ilayaperumal Gopinathan
+ * @author Patrick Peralta
  */
-public interface ResourceDeployer<R extends BaseDefinition> {
+public interface ResourceDeployer {
 
 	/**
 	 * Deploy a resource (job or stream).
@@ -39,41 +39,21 @@ public interface ResourceDeployer<R extends BaseDefinition> {
 	void deploy(String name, Map<String, String> properties);
 
 	/**
-	 * @return Iterable all definitions
+	 * todo
+	 * @param name
 	 */
-	Iterable<R> findAll();
-
-	/**
-	 * Return a slice of all definitions.
-	 */
-	Page<R> findAll(Pageable pageable);
-
-	R save(R resource);
-
-	/**
-	 * Retrieves a single Definition or null if none is found.
-	 *
-	 * @param name of the definition to find. Must not be null.
-	 */
-	R findOne(String name);
-
-	/**
-	 * Delete the Definition using the provided name. The definition may also be {@link #undeploy(String) undeployed} as
-	 * part of that process.
-	 *
-	 * @param name the name of the definition to delete
-	 */
-	void delete(String name);
-
 	void undeploy(String name);
-
-	/**
-	 * Delete all the definitions
-	 */
-	void deleteAll();
 
 	/**
 	 * Undeploy all the deployed resources.
 	 */
 	void undeployAll();
+
+	/**
+	 * For the given deployment unit id, return the deployment status.
+	 *
+	 * @param name id for deployment unit
+	 * @return deployment status
+	 */
+	DeploymentUnitStatus getDeploymentStatus(String name);
 }
