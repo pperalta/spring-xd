@@ -335,8 +335,11 @@ $$fixedDelay$$:: $$the polling interval used for looking up messages (s)$$ *($$i
 $$folder$$:: $$the folder to take emails from$$ *($$String$$, default: `INBOX`)*
 $$host$$:: $$the hostname of the mail server$$ *($$String$$, default: `localhost`)*
 $$markAsRead$$:: $$whether to mark emails as read once they’ve been fetched$$ *($$boolean$$, default: `false`)*
+$$maxMessages$$:: $$the maximum messages per poll; -1 for unlimited$$ *($$long$$, default: `1`)*
 $$password$$:: $$the password to use to connect to the mail server $$ *($$String$$, no default)*
 $$port$$:: $$the port of the mail server$$ *($$int$$, default: `25`)*
+$$properties$$:: $$comma separated JavaMail property values$$ *($$String$$, no default)*
+$$propertiesFile$$:: $$file to load the JavaMail properties$$ *($$String$$, no default)*
 $$protocol$$:: $$the protocol to use to retrieve messages$$ *($$MailProtocol$$, default: `imap`, possible values: `imap,imaps,pop3,pop3s`)*
 $$usePolling$$:: $$whether to use polling or not (no polling works with imap(s) only)$$ *($$boolean$$, default: `false`)*
 $$username$$:: $$the username to use to connect to the mail server$$ *($$String$$, no default)*
@@ -837,6 +840,7 @@ $$encoder$$:: $$the encoder to use when sending messages$$ *($$Encoding$$, defau
 $$expression$$:: $$a SpEL expression used to transform messages$$ *($$String$$, default: `payload.toString()`)*
 $$fixedDelay$$:: $$the rate at which stimulus messages will be emitted (seconds)$$ *($$int$$, default: `5`)*
 $$host$$:: $$the remote host to connect to$$ *($$String$$, default: `localhost`)*
+$$maxMessages$$:: $$the maximum messages per poll; -1 for unlimited$$ *($$long$$, default: `1`)*
 $$nio$$:: $$whether or not to use NIO$$ *($$boolean$$, default: `false`)*
 $$port$$:: $$the port on the remote host to connect to$$ *($$int$$, default: `1234`)*
 $$propertiesLocation$$:: $$the path of a properties file containing custom script variable bindings$$ *($$String$$, no default)*
@@ -1102,9 +1106,8 @@ $$fetchMaxWait$$:: $$max wait time before answering the fetch request$$ *($$int$
 $$fetchMinBytes$$:: $$the minimum amount of data the server should return for a fetch request$$ *($$int$$, default: `1`)*
 $$groupId$$:: $$kafka consumer configuration group id$$ *($$String$$, default: `<stream name>`)*
 $$initialOffsets$$:: $$comma separated list of <partition>@<offset> pairs indicating where the source should start consuming from$$ *($$String$$, default: ``)*
-$$kafkaOffsetTopicBatchSize$$:: $$maximum batched writes to offset topic, if Kafka offset strategy is chosen$$ *($$int$$, default: `200`)*
+$$kafkaOffsetTopicBatchBytes$$:: $$maximum batched bytes for writes to offset topic, if Kafka offset strategy is chosen$$ *($$int$$, default: `200`)*
 $$kafkaOffsetTopicBatchTime$$:: $$maximum time for batching writes to offset topic, if Kafka offset strategy is chosen$$ *($$int$$, default: `1000`)*
-$$kafkaOffsetTopicBatchingEnabled$$:: $$enables batching writes to offset topic, if Kafka offset strategy is chosen$$ *($$boolean$$, default: `false`)*
 $$kafkaOffsetTopicMaxSize$$:: $$maximum size of reads from offset topic, if Kafka offset strategy is chosen$$ *($$int$$, default: `1048576`)*
 $$kafkaOffsetTopicName$$:: $$name of the offset topic, if Kafka offset strategy is chosen$$ *($$String$$, default: `<stream name>-${xd.module.name}-offsets`)*
 $$kafkaOffsetTopicRequiredAcks$$:: $$required acks for writing to the Kafka offset topic, if Kafka offset strategy is chosen$$ *($$int$$, default: `1`)*
@@ -1115,12 +1118,13 @@ $$offsetUpdateCount$$:: $$frequency, in number of messages, with which offsets a
 $$offsetUpdateShutdownTimeout$$:: $$timeout for ensuring that all offsets have been written, on shutdown$$ *($$int$$, default: `2000`)*
 $$offsetUpdateTimeWindow$$:: $$frequency (in milliseconds) with which offsets are persisted mutually exclusive with the count-based offset update option (use 0 to disable either)$$ *($$int$$, default: `10000`)*
 $$partitions$$:: $$comma separated list of partition IDs to listen on$$ *($$String$$, default: ``)*
-$$queueSize$$:: $$the maximum number of messages held internally and waiting for processing, per concurrent handler$$ *($$int$$, default: `1000`)*
+$$queueSize$$:: $$the maximum number of messages held internally and waiting for processing, per concurrent handler. Value must be a power of 2$$ *($$int$$, default: `1024`)*
 $$socketBufferBytes$$:: $$socket receive buffer for network requests$$ *($$int$$, default: `2097152`)*
 $$socketTimeout$$:: $$sock timeout for network requests in milliseconds$$ *($$int$$, default: `30000`)*
 $$streams$$:: $$number of streams in the topic$$ *($$int$$, default: `1`)*
-$$topic$$:: $$kafka topic name$$ *($$String$$, default: `<stream name>`)*
-$$zkconnect$$:: $$zookeeper connect string$$ *($$String$$, default: `localhost:2181/kafka`)*
+$$topic$$:: $$single topic name$$ *($$String$$, default: ``)*
+$$topics$$:: $$comma separated kafka topic names$$ *($$String$$, default: ``)*
+$$zkconnect$$:: $$zookeeper connect string$$ *($$String$$, default: `localhost:2181`)*
 $$zkconnectionTimeout$$:: $$the max time the client waits to connect to ZK in milliseconds$$ *($$int$$, default: `6000`)*
 $$zksessionTimeout$$:: $$zookeeper session timeout in milliseconds$$ *($$int$$, default: `6000`)*
 $$zksyncTime$$:: $$how far a ZK follower can be behind a ZK leader in milliseconds$$ *($$int$$, default: `2000`)*
@@ -1175,6 +1179,7 @@ $$logAbandoned$$:: $$flag to log stack traces for application code which abandon
 $$maxActive$$:: $$maximum number of active connections that can be allocated from this pool at the same time$$ *($$int$$, default: `100`)*
 $$maxAge$$:: $$time in milliseconds to keep this connection$$ *($$int$$, default: `0`)*
 $$maxIdle$$:: $$maximum number of connections that should be kept in the pool at all times$$ *($$int$$, default: `100`)*
+$$maxMessages$$:: $$the maximum messages per poll; -1 for unlimited$$ *($$long$$, default: `1`)*
 $$maxRowsPerPoll$$:: $$max numbers of rows to process for each poll$$ *($$int$$, default: `0`)*
 $$maxWait$$:: $$maximum number of milliseconds that the pool will wait for a connection$$ *($$int$$, default: `30000`)*
 $$minEvictableIdleTimeMillis$$:: $$minimum amount of time an object may sit idle in the pool before it is eligible for eviction$$ *($$int$$, default: `60000`)*

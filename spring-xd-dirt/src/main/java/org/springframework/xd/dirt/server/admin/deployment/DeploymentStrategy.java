@@ -40,8 +40,6 @@ public interface DeploymentStrategy {
 
 	ParsingContext getParsingContext();
 
-	DeploymentUnit load(String name);
-
 	ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider(
 			DeploymentUnit deploymentUnit,
 			ModuleDeploymentPropertiesProvider<ModuleDeploymentProperties> provider);

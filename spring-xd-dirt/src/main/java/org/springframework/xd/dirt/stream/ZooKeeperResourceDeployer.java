@@ -36,7 +36,6 @@ import org.springframework.util.Assert;
 import org.springframework.xd.dirt.cluster.Container;
 import org.springframework.xd.dirt.cluster.NoContainerException;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
-import org.springframework.xd.dirt.core.BaseDefinition;
 import org.springframework.xd.dirt.core.DeploymentUnit;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.ModuleDeploymentRequestsPath;
@@ -124,11 +123,14 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 	}
 
 	@Override
-	public void deploy(String name, Map<String, String> properties) {
+	public void deploy(DeploymentUnit deploymentUnit) {
+		String name = deploymentUnit.getName();
 		logger.info("Deploying {}", name);
 
-		this.validator.validateBeforeDeploy(name, properties);
-		prepareDeployment(name, properties);
+		// todo: since the deployment unit has already been
+		// loaded, we probably don't need to worry about this
+//		this.validator.validateBeforeDeploy(name, properties);
+		prepareDeployment(deploymentUnit);
 
 		String deploymentPath = this.deploymentStrategy.getDeploymentPath(name);
 		CuratorFramework client = this.zkConnection.getClient();
@@ -160,13 +162,14 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 						this.deploymentStrategy.getParsingContext().toString(), name, deployingStatus));
 
 		try {
-			DeploymentUnit deploymentUnit = this.deploymentStrategy.load(name);
 			Collection<ModuleDeploymentStatus> deploymentStatuses = new ArrayList<ModuleDeploymentStatus>();
 			DefaultModuleDeploymentPropertiesProvider deploymentPropertiesProvider =
 					new DefaultModuleDeploymentPropertiesProvider(deploymentUnit);
-			for (Iterator<ModuleDescriptor> descriptors = deploymentUnit.getDeploymentOrderIterator(); descriptors.hasNext(); ) {
+			for (Iterator<ModuleDescriptor> descriptors = deploymentUnit.getDeploymentOrderIterator();
+				 descriptors.hasNext();) {
 				ModuleDescriptor descriptor = descriptors.next();
-				ModuleDeploymentProperties deploymentProperties = deploymentPropertiesProvider.propertiesForDescriptor(descriptor);
+				ModuleDeploymentProperties deploymentProperties =
+						deploymentPropertiesProvider.propertiesForDescriptor(descriptor);
 
 				// write out all of the required modules for this unit (including runtime properties);
 				// this does not actually perform a deployment...this data is used in case there are not
@@ -206,6 +209,7 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 				}
 			}
 
+			// todo: seems that status write should happen in a finally...
 			DeploymentUnitStatus status = stateCalculator.calculate(deploymentUnit, deploymentPropertiesProvider,
 					deploymentStatuses);
 			logger.info("Deployment status for {} '{}': {}", this.deploymentStrategy.getParsingContext(), name, status);
@@ -223,11 +227,38 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 	}
 
 	@Override
-	public void undeploy(String name) {
+	public void undeploy(DeploymentUnit deploymentUnit) {
+		String name = deploymentUnit.getName();
 		logger.info("Undeploying {}", name);
 		validator.validateBeforeUndeploy(name);
 
-		Assert.notNull(moduleDeploymentRequests, "Module deployment request path cache shouldn't be null.");
+		String deploymentPath = this.deploymentStrategy.getDeploymentPath(name);
+		CuratorFramework client = zkConnection.getClient();
+
+		try {
+			client.setData().forPath(
+					Paths.build(deploymentPath, Paths.STATUS),
+					ZooKeeperUtils.mapToBytes(new DeploymentUnitStatus(
+							DeploymentUnitStatus.State.undeploying).toMap()));
+		}
+		catch (Exception e) {
+			logger.warn("Exception while transitioning {} state to {}", deploymentUnit,
+					DeploymentUnitStatus.State.undeploying, e);
+		}
+
+		// todo: while this works for streams and jobs, it will not undeploy
+		// stream modules in the correct order; this can only be done by loading
+		// the stream in order to sort the modules by undeployment order
+		try {
+			client.delete().deletingChildrenIfNeeded()
+					.forPath(deploymentPath);
+		}
+		catch (Exception e) {
+			//NoNodeException - nothing to delete
+			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+		}
+
+		Assert.notNull(moduleDeploymentRequests, "moduleDeploymentRequests == null");
 		ModuleDeploymentRequestsPath path;
 		for (ChildData requestedModulesData : moduleDeploymentRequests.getCurrentData()) {
 			path = new ModuleDeploymentRequestsPath(requestedModulesData.getPath());
@@ -244,18 +275,24 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 
 	@Override
 	public void undeployAll() {
-		try {
-			List<String> children = zkConnection.getClient().getChildren().forPath(
-					this.deploymentStrategy.getDeploymentsPath());
-			for (String child : children) {
-				undeploy(child);
-			}
-		}
-		catch (Exception e) {
-			//NoNodeException - nothing to delete
-			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
-		}
+		// todo: maybe instead of unddeployAll, we need some way to
+		// return a list of deployed units?
+
+		throw new UnsupportedOperationException();
+
+//		try {
+//			List<String> children = zkConnection.getClient().getChildren().forPath(
+//					this.deploymentStrategy.getDeploymentsPath());
+//			for (String child : children) {
+//				undeploy(child);
+//			}
+//		}
+//		catch (Exception e) {
+//			//NoNodeException - nothing to delete
+//			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+//		}
 	}
+
 	/**
 	 * Return the ZooKeeper connection.
 	 *
@@ -298,7 +335,10 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 	 *
 	 * @see org.springframework.xd.dirt.core.DeploymentUnitStatus.State#deploying
 	 */
-	protected void prepareDeployment(String name, Map<String, String> properties) {
+	protected void prepareDeployment(DeploymentUnit deploymentUnit) {
+		String name = deploymentUnit.getName();
+		Map<String, String> properties = deploymentUnit.getDeploymentProperties();
+
 		Assert.hasText(name, "name cannot be blank or null");
 		logger.trace("Preparing deployment of '{}'", name);
 

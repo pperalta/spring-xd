@@ -33,16 +33,15 @@ public interface ResourceDeployer {
 	/**
 	 * Deploy a resource (job or stream).
 	 *
-	 * @param name name of the resource
-	 * @param properties deployment properties to use (may not be null)
+	 * @param deploymentUnit
 	 */
-	void deploy(String name, Map<String, String> properties);
+	void deploy(DeploymentUnit deploymentUnit);
 
 	/**
 	 * todo
-	 * @param name
+	 * @param deploymentUnit
 	 */
-	void undeploy(String name);
+	void undeploy(DeploymentUnit deploymentUnit);
 
 	/**
 	 * Undeploy all the deployed resources.

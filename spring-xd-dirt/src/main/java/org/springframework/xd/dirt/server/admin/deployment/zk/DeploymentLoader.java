@@ -20,6 +20,8 @@ import java.util.Map;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.KeeperException;
+import parquet.org.slf4j.Logger;
+import parquet.org.slf4j.LoggerFactory;
 
 import org.springframework.xd.dirt.core.Job;
 import org.springframework.xd.dirt.core.Stream;
@@ -44,6 +46,8 @@ import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
  */
 public class DeploymentLoader {
 
+	private final static Logger logger = LoggerFactory.getLogger(DeploymentLoader.class);
+
 	/**
 	 * Load the {@link org.springframework.xd.dirt.core.Job}
 	 * instance for a given job name<i>if the job is deployed</i>.
@@ -53,10 +57,9 @@ public class DeploymentLoader {
 	 * @param jobFactory job factory used to create instance of job
 	 * @return the job instance, or {@code null} if the job does not exist
 	 *         or is not deployed
-	 * @throws Exception
 	 */
 	public static Job loadJob(CuratorFramework client, String jobName,
-			JobFactory jobFactory) throws Exception {
+			JobFactory jobFactory) {
 		try {
 			byte[] definition = client.getData().forPath(Paths.build(Paths.JOBS, jobName));
 			Map<String, String> definitionMap = ZooKeeperUtils.bytesToMap(definition);
@@ -70,6 +73,9 @@ public class DeploymentLoader {
 		}
 		catch (KeeperException.NoNodeException e) {
 			// job is not deployed
+		}
+		catch (Exception e) {
+			throw ZooKeeperUtils.wrapThrowable(e);
 		}
 		return null;
 	}
@@ -85,10 +91,9 @@ public class DeploymentLoader {
 	 * @param streamFactory  stream factory used to create instance of stream
 	 * @return the stream instance, or {@code null} if the stream does
 	 *         not exist or is not deployed
-	 * @throws Exception if ZooKeeper access fails for any reason
 	 */
 	public static Stream loadStream(CuratorFramework client, String streamName,
-			StreamFactory streamFactory) throws Exception {
+			StreamFactory streamFactory) {
 		try {
 			byte[] definition = client.getData().forPath(Paths.build(Paths.STREAMS, streamName));
 			Map<String, String> definitionMap = ZooKeeperUtils.bytesToMap(definition);
@@ -101,7 +106,11 @@ public class DeploymentLoader {
 			return streamFactory.createStream(streamName, definitionMap);
 		}
 		catch (KeeperException.NoNodeException e) {
+			logger.warn("===> error loading stream", e);
 			// stream is not deployed or does not exist
+		}
+		catch (Exception e) {
+			throw ZooKeeperUtils.wrapThrowable(e);
 		}
 		return null;
 	}

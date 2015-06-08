@@ -308,11 +308,11 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 		StreamDefinition bar2Definition = new StreamDefinition("bar2Definition",
 				"topic:foo > queue:bar2");
 		assertEquals(0, integrationSupport.streamRepository().count());
-		integrationSupport.streamDeployer().save(bar1Definition);
+		integrationSupport.streamDefinitionRepository().save(bar1Definition);
 		integrationSupport.deployStream(bar1Definition,
 				Collections.singletonMap("module.*." + ModuleDeploymentProperties.TRACK_HISTORY_KEY, "true"));
 
-		integrationSupport.streamDeployer().save(bar2Definition);
+		integrationSupport.streamDefinitionRepository().save(bar2Definition);
 		integrationSupport.deployStream(bar2Definition);
 		Thread.sleep(1000);
 		assertEquals(2, integrationSupport.streamRepository().count());
@@ -356,7 +356,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 			StreamDefinition definition = new StreamDefinition(streamName,
 					"http --port=" + SocketUtils.findAvailableServerSocket()
 							+ "| transform --expression=payload | filter --expression=true | log");
-			integrationSupport.streamDeployer().save(definition);
+			integrationSupport.streamDefinitionRepository().save(definition);
 			assertTrue(String.format("stream %s (%s) not deployed", streamName, definition),
 					integrationSupport.deployStream(definition));
 			assertEquals(1, integrationSupport.streamRepository().count());
@@ -404,7 +404,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 	public void moduleDeploymentPropertiesForModuleName() throws InterruptedException {
 		String streamName = "moduleDeploymentPropertiesForModuleName";
 		StreamDefinition definition = new StreamDefinition(streamName, getHttpLogStream());
-		integrationSupport.streamDeployer().save(definition);
+		integrationSupport.streamDefinitionRepository().save(definition);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.log.prop1", "0");
 		props.put("module.log.foo", "bar");
@@ -423,7 +423,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 		String dsl = String.format("http --port=%s | t1: transform | t2: transform | log",
 				SocketUtils.findAvailableServerSocket());
 		StreamDefinition definition = new StreamDefinition(streamName, dsl);
-		integrationSupport.streamDeployer().save(definition);
+		integrationSupport.streamDefinitionRepository().save(definition);
 		Map<String, String> props = new HashMap<String, String>();
 		props.put("module.t1.prop1", "0");
 		props.put("module.t1.other", "foo");
@@ -621,7 +621,7 @@ public abstract class AbstractSingleNodeStreamDeploymentIntegrationTests {
 
 	private void doTest(StreamDefinition routerDefinition) throws InterruptedException {
 		assertEquals(0, integrationSupport.streamRepository().count());
-		integrationSupport.streamDeployer().save(routerDefinition);
+		integrationSupport.streamDefinitionRepository().save(routerDefinition);
 		assertTrue("stream not deployed", integrationSupport.deployStream(routerDefinition));
 		assertEquals(1, integrationSupport.streamRepository().count());
 

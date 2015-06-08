@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.job.BatchJobAlreadyExistsException;
 import org.springframework.xd.dirt.plugins.job.DistributedJobLocator;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
@@ -59,7 +60,7 @@ public class JobsController extends
 	private DistributedJobLocator distributedJobLocator;
 
 	@Autowired
-	public JobsController(JobDeployer jobDeployer) {
+	public JobsController(ResourceDeployer jobDeployer) {
 		super(jobDeployer, new JobDefinitionResourceAssembler(), DeploymentUnitType.Job);
 	}
 

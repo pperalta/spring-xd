@@ -45,6 +45,12 @@ public interface DeploymentUnit {
 	 */
 	List<ModuleDescriptor> getModuleDescriptors();
 
+	/**
+	 * Iterator that iterates over modules in the order in which
+	 * they should be deployed.
+	 *
+	 * @return iterator of modules in deployment order
+	 */
 	Iterator<ModuleDescriptor> getDeploymentOrderIterator();
 
 	/**

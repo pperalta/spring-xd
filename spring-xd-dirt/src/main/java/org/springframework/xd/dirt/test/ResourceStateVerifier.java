@@ -20,9 +20,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.xd.dirt.core.BaseDefinition;
-import org.springframework.xd.dirt.core.DeploymentStatusRepository;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus.State;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.store.DomainRepository;
 
 /**
@@ -40,18 +40,18 @@ public class ResourceStateVerifier {
 
 	private static final long STATE_CHANGE_TIMEOUT = 35000;
 
-	private final DeploymentStatusRepository<?, String> deploymentStatusRepository;
+	private final ResourceDeployer resourceDeployer;
 
 	private final DomainRepository<? extends BaseDefinition, String> domainRepository;
 
 	/**
 	 *
-	 * @param deploymentStatusRepository the repository that tracks deployment status
+	 * @param resourceDeployer the repository that tracks deployment status
 	 * @param domainRepository the resource definition repository
 	 */
-	public ResourceStateVerifier(DeploymentStatusRepository<?, String> deploymentStatusRepository,
+	public ResourceStateVerifier(ResourceDeployer resourceDeployer,
 			DomainRepository<? extends BaseDefinition, String> domainRepository) {
-		this.deploymentStatusRepository = deploymentStatusRepository;
+		this.resourceDeployer = resourceDeployer;
 		this.domainRepository = domainRepository;
 	}
 
@@ -132,13 +132,13 @@ public class ResourceStateVerifier {
 	 * Wait for the State to change to one or more expected target states.
 	 */
 	State waitForDeployState(String resourceName, State... targetStates) {
-		DeploymentUnitStatus.State currentState = deploymentStatusRepository.getDeploymentStatus(resourceName).getState();
+		DeploymentUnitStatus.State currentState = resourceDeployer.getDeploymentStatus(resourceName).getState();
 		long waitTime = 0;
 		List<State> targetStateList = Arrays.asList(targetStates);
 		while (!targetStateList.contains(currentState) && waitTime < STATE_CHANGE_TIMEOUT) {
 			try {
 				Thread.sleep(STATE_CHANGE_WAIT_TIME);
-				currentState = deploymentStatusRepository.getDeploymentStatus(resourceName).getState();
+				currentState = resourceDeployer.getDeploymentStatus(resourceName).getState();
 				waitTime += STATE_CHANGE_WAIT_TIME;
 			}
 			catch (InterruptedException e) {

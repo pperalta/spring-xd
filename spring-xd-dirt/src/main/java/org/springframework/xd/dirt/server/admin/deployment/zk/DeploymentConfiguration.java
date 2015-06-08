@@ -112,7 +112,7 @@ public class DeploymentConfiguration {
 	}
 
 	@Bean
-	JobDeploymentStrategy jobDeploymentStrategy() {
+	public JobDeploymentStrategy jobDeploymentStrategy() {
 		return new JobDeploymentStrategy();
 	}
 
@@ -122,19 +122,13 @@ public class DeploymentConfiguration {
 	}
 
 	@Bean
-	@Scope("prototype")
-	ResourceDeployer resourceDeployer(DeploymentStrategy strategy) {
-		return new ZooKeeperResourceDeployer(strategy);
+	public ResourceDeployer streamDeployer() {
+		return new ZooKeeperResourceDeployer(streamDeploymentStrategy());
 	}
 
 	@Bean
-	public StreamDeployer zkStreamDeployer() {
-		return new StreamDeployer(resourceDeployer(streamDeploymentStrategy()));
-	}
-
-	@Bean
-	public JobDeployer zkJobDeployer() {
-		return new JobDeployer(resourceDeployer(jobDeploymentStrategy()));
+	public ResourceDeployer jobDeployer() {
+		return new ZooKeeperResourceDeployer(jobDeploymentStrategy());
 	}
 
 	@Bean

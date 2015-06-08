@@ -13,30 +13,11 @@
 
 package org.springframework.xd.dirt.stream;
 
-import static org.springframework.xd.dirt.stream.ParsingContext.job;
-
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.integration.channel.DirectChannel;
-import org.springframework.integration.support.MessageBuilder;
-import org.springframework.messaging.MessageChannel;
-import org.springframework.util.Assert;
+import org.springframework.xd.dirt.core.DeploymentUnit;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.ResourceDeployer;
-import org.springframework.xd.dirt.integration.bus.MessageBus;
-import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
-import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
-import org.springframework.xd.dirt.server.admin.deployment.JobDeploymentStrategy;
-import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.zk.SupervisorElectedEvent;
 import org.springframework.xd.dirt.server.admin.deployment.zk.SupervisorElectionListener;
-import org.springframework.xd.dirt.zookeeper.Paths;
-import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
-import org.springframework.xd.module.ModuleDescriptor;
 
 /**
  * @author Glenn Renfro
@@ -45,40 +26,41 @@ import org.springframework.xd.module.ModuleDescriptor;
  * @author Gunnar Hillert
  */
 //public class JobDeployer extends AbstractInstancePersistingDeployer<JobDefinition, Job> implements DisposableBean {
-public class JobDeployer implements ResourceDeployer, SupervisorElectionListener {
+//public class JobDeployer implements ResourceDeployer, SupervisorElectionListener {
+public class JobDeployer  {
 
-	private final ResourceDeployer deployer;
-
-	public JobDeployer(ResourceDeployer deployer) {
-		this.deployer = deployer;
-	}
-
-	@Override
-	public void deploy(String name, Map<String, String> properties) {
-		deployer.deploy(name, properties);
-	}
-
-	@Override
-	public void undeploy(String name) {
-		deployer.undeploy(name);
-	}
-
-	@Override
-	public void undeployAll() {
-		deployer.undeployAll();
-	}
-
-	@Override
-	public DeploymentUnitStatus getDeploymentStatus(String name) {
-		return deployer.getDeploymentStatus(name);
-	}
-
-	@Override
-	public void onSupervisorElected(SupervisorElectedEvent event) throws Exception {
-		if (this.deployer instanceof SupervisorElectionListener) {
-			((SupervisorElectionListener) this.deployer).onSupervisorElected(event);
-		}
-	}
+//	private final ResourceDeployer deployer;
+//
+//	public JobDeployer(ResourceDeployer deployer) {
+//		this.deployer = deployer;
+//	}
+//
+//	@Override
+//	public void deploy(DeploymentUnit deploymentUnit) {
+//		deployer.deploy(name);
+//	}
+//
+//	@Override
+//	public void undeploy(DeploymentUnit deploymentUnit) {
+//		deployer.undeploy(name);
+//	}
+//
+//	@Override
+//	public void undeployAll() {
+//		deployer.undeployAll();
+//	}
+//
+//	@Override
+//	public DeploymentUnitStatus getDeploymentStatus(String name) {
+//		return deployer.getDeploymentStatus(name);
+//	}
+//
+//	@Override
+//	public void onSupervisorElected(SupervisorElectedEvent event) throws Exception {
+//		if (this.deployer instanceof SupervisorElectionListener) {
+//			((SupervisorElectionListener) this.deployer).onSupervisorElected(event);
+//		}
+//	}
 
 //	private final String JOB_CHANNEL_PREFIX = "job:";
 //
@@ -100,9 +82,9 @@ public class JobDeployer implements ResourceDeployer, SupervisorElectionListener
 //	}
 //
 
-	public void launch(String name, String jobParameters) {
-		throw new UnsupportedOperationException();
-	}
+//	public void launch(String name, String jobParameters) {
+//		throw new UnsupportedOperationException();
+//	}
 
 //	public void launch(String name, String jobParameters) {
 //		MessageChannel channel = jobChannels.get(name);

@@ -16,41 +16,27 @@
 
 package org.springframework.xd.dirt.stream;
 
-import static org.springframework.xd.dirt.stream.ParsingContext.stream;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-
-import javax.annotation.PostConstruct;
 
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.api.BackgroundPathAndBytesable;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.xd.dirt.core.DeploymentUnit;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.core.StreamDeploymentsPath;
-import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
-import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
-import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.zk.SupervisorElectedEvent;
 import org.springframework.xd.dirt.server.admin.deployment.zk.SupervisorElectionListener;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
-import org.springframework.xd.module.ModuleDefinition;
 import org.springframework.xd.module.ModuleDescriptor;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 
 /**
  * Default implementation of {@link StreamDeployer} that uses provided
@@ -66,153 +52,154 @@ import com.fasterxml.jackson.databind.ObjectWriter;
  * @author Ilayaperumal Gopinathan
  */
 //public class StreamDeployer extends AbstractInstancePersistingDeployer<StreamDefinition, Stream> {
-public class StreamDeployer implements ResourceDeployer, SupervisorElectionListener {
-	private final Logger logger = LoggerFactory.getLogger(this.getClass());
-
-	private final ResourceDeployer deployer;
-
-	@Autowired
-	private ZooKeeperConnection zkConnection;
-
-	public StreamDeployer(ResourceDeployer deployer) {
-		this.deployer = deployer;
-	}
-
-	@Override
-	public void deploy(String name, Map<String, String> properties) {
-		deployer.deploy(name, properties);
-	}
-
-	@Override
-	public void undeploy(String id) {
-		logger.info("Undeploying stream {}", id);
-
-		String streamDeploymentPath = Paths.build(Paths.STREAM_DEPLOYMENTS, id);
-		String streamModuleDeploymentPath = Paths.build(streamDeploymentPath, Paths.MODULES);
-		CuratorFramework client = zkConnection.getClient();
-
-		try {
-			client.setData().forPath(
-					Paths.build(Paths.STREAM_DEPLOYMENTS, id, Paths.STATUS),
-					ZooKeeperUtils.mapToBytes(new DeploymentUnitStatus(
-							DeploymentUnitStatus.State.undeploying).toMap()));
-		}
-		catch (Exception e) {
-			logger.warn("Exception while transitioning stream {} state to {}", id,
-					DeploymentUnitStatus.State.undeploying, e);
-		}
-
-		// Stream module un-deployment happens in the following steps:
-		//
-		// 1. Load the stream module deployment paths for the given stream.
-		//    These are the ephemeral nodes created by the container that
-		//    deployed the stream.
-		//
-		// 2. Load/parse the stream definition. This is used to determine
-		//    the order of the stream modules. Un-deployment should
-		//    occur in left to right (sources, processors, sinks)
-		//
-		// 3. Using the parsed stream definition, sort the list of
-		//    module deployment paths in the order in which they should
-		//    be undeployed.
-		//
-		// 4. Remove the module deployment and stream paths.
-
-		List<StreamDeploymentsPath> paths = new ArrayList<StreamDeploymentsPath>();
-		try {
-			List<String> deployments = client.getChildren().forPath(streamModuleDeploymentPath);
-			for (String deployment : deployments) {
-				paths.add(new StreamDeploymentsPath(Paths.build(streamModuleDeploymentPath, deployment)));
-			}
-		}
-		catch (Exception e) {
-			//NoNodeException - nothing to delete
-			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
-		}
-
-		try {
-			// todo
-			// At a bit of a dead end here - it turns out that this class needs to know
-			// a lot more detail about the underlying ResourceDeployer than I would have
-			// liked. Going to attempt a different approach by forcing ResourceDeployer
-			// to work directly with Streams and Jobs instead of just using IDs.
-			// Also going to see if this stream undeployment routine can be made
-			// generic enough to work with jobs.
-
-			final Stream stream = loadStream(id);
-			Comparator<StreamDeploymentsPath> pathComparator = new Comparator<StreamDeploymentsPath>() {
-				@Override
-				public int compare(StreamDeploymentsPath path0, StreamDeploymentsPath path1) {
-					int i0 = 0;
-					int i1 = 0;
-					for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptors()) {
-						if (path0.getModuleLabel().equals(moduleDescriptor.getModuleLabel())) {
-							i0 = moduleDescriptor.getIndex();
-						}
-						else if (path1.getModuleLabel().equals(moduleDescriptor.getModuleLabel())) {
-							i1 = moduleDescriptor.getIndex();
-						}
-						if (i0 > 0 && i1 > 0) {
-							break;
-						}
-					}
-					return Integer.compare(i0, i1);
-				}
-			};
-			Collections.sort(paths, pathComparator);
-		}
-		catch (Exception e) {
-			// todo: if we can't load the stream, we can't sort its modules for un-deployment
-			logger.warn("Error loading stream " + id, e);
-		}
-
-		for (StreamDeploymentsPath path : paths) {
-			try {
-				logger.trace("removing path {}", path);
-				client.delete().deletingChildrenIfNeeded().forPath(path.build());
-			}
-			catch (Exception e) {
-				ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
-			}
-		}
-
-		try {
-			client.delete().deletingChildrenIfNeeded().forPath(streamDeploymentPath);
-		}
-		catch (KeeperException.NotEmptyException e) {
-			List<String> children = new ArrayList<String>();
-			try {
-				children.addAll(client.getChildren().forPath(streamModuleDeploymentPath));
-			}
-			catch (Exception ex) {
-				children.add("Could not load list of children due to " + ex);
-			}
-			throw new IllegalStateException(String.format(
-					"The following children were not deleted from %s: %s", streamModuleDeploymentPath, children), e);
-		}
-		catch (Exception e) {
-			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
-		}
-
-		deployer.undeploy(id);
-	}
-
-	@Override
-	public void undeployAll() {
-		deployer.undeployAll();
-	}
-
-	@Override
-	public DeploymentUnitStatus getDeploymentStatus(String name) {
-		return deployer.getDeploymentStatus(name);
-	}
-
-	@Override
-	public void onSupervisorElected(SupervisorElectedEvent event) throws Exception {
-		if (this.deployer instanceof SupervisorElectionListener) {
-			((SupervisorElectionListener) this.deployer).onSupervisorElected(event);
-		}
-	}
+//public class StreamDeployer implements ResourceDeployer, SupervisorElectionListener {
+public class StreamDeployer {
+//	private final Logger logger = LoggerFactory.getLogger(this.getClass());
+//
+//	private final ResourceDeployer deployer;
+//
+//	@Autowired
+//	private ZooKeeperConnection zkConnection;
+//
+//	public StreamDeployer(ResourceDeployer deployer) {
+//		this.deployer = deployer;
+//	}
+//
+//	@Override
+//	public void deploy(DeploymentUnit deploymentUnit) {
+//		deployer.deploy(name);
+//	}
+//
+//	@Override
+//	public void undeploy(DeploymentUnit deploymentUnit) {
+//		logger.info("Undeploying stream {}", id);
+//
+//		String streamDeploymentPath = Paths.build(Paths.STREAM_DEPLOYMENTS, id);
+//		String streamModuleDeploymentPath = Paths.build(streamDeploymentPath, Paths.MODULES);
+//		CuratorFramework client = zkConnection.getClient();
+//
+//		try {
+//			client.setData().forPath(
+//					Paths.build(Paths.STREAM_DEPLOYMENTS, id, Paths.STATUS),
+//					ZooKeeperUtils.mapToBytes(new DeploymentUnitStatus(
+//							DeploymentUnitStatus.State.undeploying).toMap()));
+//		}
+//		catch (Exception e) {
+//			logger.warn("Exception while transitioning stream {} state to {}", id,
+//					DeploymentUnitStatus.State.undeploying, e);
+//		}
+//
+//		// Stream module un-deployment happens in the following steps:
+//		//
+//		// 1. Load the stream module deployment paths for the given stream.
+//		//    These are the ephemeral nodes created by the container that
+//		//    deployed the stream.
+//		//
+//		// 2. Load/parse the stream definition. This is used to determine
+//		//    the order of the stream modules. Un-deployment should
+//		//    occur in left to right (sources, processors, sinks)
+//		//
+//		// 3. Using the parsed stream definition, sort the list of
+//		//    module deployment paths in the order in which they should
+//		//    be undeployed.
+//		//
+//		// 4. Remove the module deployment and stream paths.
+//
+//		List<StreamDeploymentsPath> paths = new ArrayList<StreamDeploymentsPath>();
+//		try {
+//			List<String> deployments = client.getChildren().forPath(streamModuleDeploymentPath);
+//			for (String deployment : deployments) {
+//				paths.add(new StreamDeploymentsPath(Paths.build(streamModuleDeploymentPath, deployment)));
+//			}
+//		}
+//		catch (Exception e) {
+//			//NoNodeException - nothing to delete
+//			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+//		}
+//
+//		try {
+//			// todo
+//			// At a bit of a dead end here - it turns out that this class needs to know
+//			// a lot more detail about the underlying ResourceDeployer than I would have
+//			// liked. Going to attempt a different approach by forcing ResourceDeployer
+//			// to work directly with Streams and Jobs instead of just using IDs.
+//			// Also going to see if this stream undeployment routine can be made
+//			// generic enough to work with jobs.
+//
+//			final Stream stream = loadStream(id);
+//			Comparator<StreamDeploymentsPath> pathComparator = new Comparator<StreamDeploymentsPath>() {
+//				@Override
+//				public int compare(StreamDeploymentsPath path0, StreamDeploymentsPath path1) {
+//					int i0 = 0;
+//					int i1 = 0;
+//					for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptors()) {
+//						if (path0.getModuleLabel().equals(moduleDescriptor.getModuleLabel())) {
+//							i0 = moduleDescriptor.getIndex();
+//						}
+//						else if (path1.getModuleLabel().equals(moduleDescriptor.getModuleLabel())) {
+//							i1 = moduleDescriptor.getIndex();
+//						}
+//						if (i0 > 0 && i1 > 0) {
+//							break;
+//						}
+//					}
+//					return Integer.compare(i0, i1);
+//				}
+//			};
+//			Collections.sort(paths, pathComparator);
+//		}
+//		catch (Exception e) {
+//			// todo: if we can't load the stream, we can't sort its modules for un-deployment
+//			logger.warn("Error loading stream " + id, e);
+//		}
+//
+//		for (StreamDeploymentsPath path : paths) {
+//			try {
+//				logger.trace("removing path {}", path);
+//				client.delete().deletingChildrenIfNeeded().forPath(path.build());
+//			}
+//			catch (Exception e) {
+//				ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+//			}
+//		}
+//
+//		try {
+//			client.delete().deletingChildrenIfNeeded().forPath(streamDeploymentPath);
+//		}
+//		catch (KeeperException.NotEmptyException e) {
+//			List<String> children = new ArrayList<String>();
+//			try {
+//				children.addAll(client.getChildren().forPath(streamModuleDeploymentPath));
+//			}
+//			catch (Exception ex) {
+//				children.add("Could not load list of children due to " + ex);
+//			}
+//			throw new IllegalStateException(String.format(
+//					"The following children were not deleted from %s: %s", streamModuleDeploymentPath, children), e);
+//		}
+//		catch (Exception e) {
+//			ZooKeeperUtils.wrapAndThrowIgnoring(e, KeeperException.NoNodeException.class);
+//		}
+//
+//		deployer.undeploy(id);
+//	}
+//
+//	@Override
+//	public void undeployAll() {
+//		deployer.undeployAll();
+//	}
+//
+//	@Override
+//	public DeploymentUnitStatus getDeploymentStatus(String name) {
+//		return deployer.getDeploymentStatus(name);
+//	}
+//
+//	@Override
+//	public void onSupervisorElected(SupervisorElectedEvent event) throws Exception {
+//		if (this.deployer instanceof SupervisorElectionListener) {
+//			((SupervisorElectionListener) this.deployer).onSupervisorElected(event);
+//		}
+//	}
 
 //
 //	private static final Logger logger = LoggerFactory.getLogger(StreamDeployer.class);

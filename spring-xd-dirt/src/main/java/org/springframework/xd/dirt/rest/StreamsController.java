@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.Stream;
 import org.springframework.xd.dirt.stream.StreamDefinition;
@@ -55,7 +56,7 @@ public class StreamsController extends
 		XDController<StreamDefinition, StreamDefinitionResourceAssembler, StreamDefinitionResource, Stream> {
 
 	@Autowired
-	public StreamsController(StreamDeployer streamDeployer) {
+	public StreamsController(ResourceDeployer streamDeployer) {
 		super(streamDeployer, new StreamDefinitionResourceAssembler(), DeploymentUnitType.Stream);
 	}
 

@@ -34,8 +34,8 @@ import org.springframework.xd.dirt.test.SingleNodeIntegrationTestSupport;
 
 
 /**
- * Test class to validate the deployment behavior that need not be tested across transports.  
- * 
+ * Test class to validate the deployment behavior that need not be tested across transports.
+ *
  * @author Eric Bottard
  */
 public class DeployerTests {
@@ -62,13 +62,14 @@ public class DeployerTests {
 
 	@After
 	public void cleanStreams() {
-		integrationSupport.streamDeployer().deleteAll();
+		throw new UnsupportedOperationException("fix me");
+//		integrationSupport.streamDeployer().deleteAll();
 	}
 
 	@Test
 	public void testValidDeploymentProperties() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		Map<String, String> properties = Collections.singletonMap("module.log.count", "3");
 		integrationSupport.deployStream(testStream, properties);
@@ -77,7 +78,7 @@ public class DeployerTests {
 	@Test
 	public void testValidDeploymentPropertiesUsesLabel() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | bar:log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		Map<String, String> properties = Collections.singletonMap("module.bar.count", "3");
 		integrationSupport.deployStream(testStream, properties);
@@ -86,7 +87,7 @@ public class DeployerTests {
 	@Test
 	public void testInvalidDeploymentProperties() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		thrown.expect(IllegalArgumentException.class);
 		thrown.expectMessage(containsString("module.logo.count"));
@@ -98,7 +99,7 @@ public class DeployerTests {
 	@Test
 	public void testInvalidDeploymentPropertiesShouldUseLabel() {
 		StreamDefinition testStream = new StreamDefinition("foo", "http | bar: log");
-		integrationSupport.streamDeployer().save(testStream);
+		integrationSupport.streamDefinitionRepository().save(testStream);
 
 		thrown.expect(IllegalArgumentException.class);
 		thrown.expectMessage(containsString("module.log.count"));

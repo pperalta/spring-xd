@@ -23,17 +23,21 @@ import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.springframework.util.Assert;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus.State;
 import org.springframework.xd.dirt.core.ResourceDeployer;
+import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.integration.bus.MessageBusSupport;
+import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.DelegatingModuleRegistry;
 import org.springframework.xd.dirt.module.ModuleDeployer;
 import org.springframework.xd.dirt.module.ModuleRegistry;
+import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentLoader;
 import org.springframework.xd.dirt.server.singlenode.SingleNodeApplication;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobRepository;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
@@ -62,7 +66,7 @@ public class SingleNodeIntegrationTestSupport {
 
 	private final JobRepository jobRepository;
 
-	private final StreamDeployer streamDeployer;
+	private final ResourceDeployer streamDeployer;
 
 	private final MessageBusSupport messageBus;
 
@@ -73,6 +77,10 @@ public class SingleNodeIntegrationTestSupport {
 	private final ResourceStateVerifier streamResourceStateVerifier;
 
 	private final ResourceStateVerifier jobResourceStateVerifier;
+
+	private final StreamFactory streamFactory;
+
+	private final JobFactory jobFactory;
 
 	private final SingleNodeApplication application;
 
@@ -91,12 +99,15 @@ public class SingleNodeIntegrationTestSupport {
 		jobDefinitionRepository = application.pluginContext().getBean(JobDefinitionRepository.class);
 		streamRepository = application.pluginContext().getBean(StreamRepository.class);
 		jobRepository = application.pluginContext().getBean(JobRepository.class);
-		streamResourceStateVerifier = new ResourceStateVerifier(streamRepository, streamDefinitionRepository);
-		jobResourceStateVerifier = new ResourceStateVerifier(jobRepository, jobDefinitionRepository);
-		streamDeployer = application.adminContext().getBean(StreamDeployer.class);
+		streamDeployer = application.adminContext().getBean("streamDeployer", ResourceDeployer.class);
+		streamResourceStateVerifier = new ResourceStateVerifier(streamDeployer, streamDefinitionRepository);
+		ResourceDeployer jobDeployer = application.adminContext().getBean("jobDeployer", ResourceDeployer.class);
+		jobResourceStateVerifier = new ResourceStateVerifier(jobDeployer, jobDefinitionRepository);
 		messageBus = application.pluginContext().getBean(MessageBusSupport.class);
 		zooKeeperConnection = application.adminContext().getBean(ZooKeeperConnection.class);
 		moduleDeployer = application.containerContext().getBean(ModuleDeployer.class);
+		streamFactory = application.pluginContext().getBean(StreamFactory.class);
+		jobFactory = application.pluginContext().getBean(JobFactory.class);
 	}
 
 	public final void addModuleRegistry(ModuleRegistry moduleRegistry) {
@@ -117,7 +128,7 @@ public class SingleNodeIntegrationTestSupport {
 		return moduleDeployer.getDeployedModules();
 	}
 
-	public final StreamDeployer streamDeployer() {
+	public final ResourceDeployer streamDeployer() {
 		return streamDeployer;
 	}
 
@@ -293,7 +304,9 @@ public class SingleNodeIntegrationTestSupport {
 	}
 
 	private boolean waitForUndeploy(StreamDefinition definition) {
-		streamDeployer.undeploy(definition.getName());
+		Stream stream = DeploymentLoader.loadStream(zooKeeperConnection.getClient(),
+				definition.getName(), streamFactory);
+		streamDeployer.undeploy(stream);
 		State state = streamResourceStateVerifier.waitForUndeploy(definition.getName());
 		return state.equals(State.undeployed);
 	}
@@ -303,17 +316,17 @@ public class SingleNodeIntegrationTestSupport {
 	}
 
 	private boolean waitForDeploy(StreamDefinition definition, Map<String, String> properties) {
-		streamDeployer.deploy(definition.getName(), properties);
+		Stream stream = DeploymentLoader.loadStream(zooKeeperConnection.getClient(),
+				definition.getName(), streamFactory);
+		streamDeployer.deploy(stream);
 		State state = streamStateVerifier().waitForDeploy(definition.getName());
-		if (state.equals(State.deployed)) {
-			return true;
-		}
-		return false;
-
+		return state.equals(State.deployed);
 	}
 
 	private boolean waitForDeploy(StreamDefinition definition, Map<String, String> properties, boolean allowIncomplete) {
-		streamDeployer.deploy(definition.getName(), properties);
+		Stream stream = DeploymentLoader.loadStream(zooKeeperConnection.getClient(),
+				definition.getName(), streamFactory);
+		streamDeployer.deploy(stream);
 		State state = streamResourceStateVerifier.waitForDeploy(definition.getName(), allowIncomplete);
 		if (allowIncomplete) {
 		  return state.equals(State.deployed) || state.equals(State.incomplete);

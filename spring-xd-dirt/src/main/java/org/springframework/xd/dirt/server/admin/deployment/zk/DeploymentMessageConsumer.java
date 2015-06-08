@@ -16,8 +16,6 @@
 
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
-import java.util.Collections;
-
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.queue.QueueConsumer;
 import org.apache.curator.framework.state.ConnectionState;
@@ -26,7 +24,9 @@ import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
+import org.springframework.xd.dirt.core.DeploymentUnit;
 import org.springframework.xd.dirt.core.ResourceDeployer;
+import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentAction;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
@@ -37,6 +37,7 @@ import org.springframework.xd.dirt.stream.NotDeployedException;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
@@ -53,11 +54,17 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 
 	private static final Logger logger = LoggerFactory.getLogger(DeploymentMessageConsumer.class);
 
-	@Autowired
-	private StreamDeployer streamDeployer;
+//	@Autowired
+//	private StreamDeployer streamDeployer;
+//
+//	@Autowired
+//	private JobDeployer jobDeployer;
 
 	@Autowired
-	private JobDeployer jobDeployer;
+	private ResourceDeployer streamDeployer;
+
+	@Autowired
+	private ResourceDeployer jobDeployer;
 
 	@Autowired
 	private ZooKeeperConnection zkConnection;
@@ -67,6 +74,12 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 
 	@Autowired
 	private JobDefinitionRepository jobRepository;
+
+	@Autowired
+	private StreamFactory streamFactory;
+
+	@Autowired
+	private JobFactory jobFactory;
 
 //	// todo: for testing only; this will be removed eventually
 //	public void consumeMessage(DeploymentMessage message, StreamDeployer streamDeployer, JobDeployer jobDeployer) throws Exception {
@@ -103,22 +116,30 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 							break;
 					}
 				}
-				if (DeploymentAction.createAndDeploy == action) {
-					deployer.deploy(name, Collections.<String, String>emptyMap());
-				}
-				break;
+			}
+
+			// todo: seems like I'm missing something that is
+			// preventing the stream from being loaded via DeploymentLoader
+
+			DeploymentUnit deploymentUnit = type == DeploymentUnitType.Job
+					? DeploymentLoader.loadJob(zkConnection.getClient(), name, jobFactory)
+					: DeploymentLoader.loadStream(zkConnection.getClient(), name, streamFactory);
+			logger.warn("deployment unit: {}", deploymentUnit);
+
+			switch (action) {
+				case createAndDeploy:
 				case deploy:
-					deployer.deploy(name, message.getDeploymentProperties());
+					deployer.deploy(deploymentUnit);
 					break;
 				case undeploy:
-					deployer.undeploy(name);
+					deployer.undeploy(deploymentUnit);
 					break;
 				case undeployAll:
 					deployer.undeployAll();
 					break;
 				case destroy:
 					try {
-						deployer.undeploy(name);
+						deployer.undeploy(deploymentUnit);
 					}
 					catch (NotDeployedException e) {
 						// ignore

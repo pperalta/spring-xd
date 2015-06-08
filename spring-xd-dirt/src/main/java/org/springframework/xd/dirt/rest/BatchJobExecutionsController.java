@@ -66,8 +66,8 @@ import org.springframework.xd.rest.domain.JobExecutionInfoResource;
 @ExposesResourceFor(JobExecutionInfoResource.class)
 public class BatchJobExecutionsController extends AbstractBatchJobsController {
 
-	@Autowired
-	private JobDeployer jobDeployer;
+//	@Autowired
+//	private JobDeployer jobDeployer;
 
 	@Autowired
 	private DistributedJobLocator jobLocator;

@@ -34,6 +34,7 @@ import org.springframework.batch.core.repository.dao.JdbcExecutionContextDao;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.scheduling.PollerMetadata;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -43,6 +44,7 @@ import org.springframework.xd.analytics.metrics.core.FieldValueCounterRepository
 import org.springframework.xd.analytics.metrics.core.GaugeRepository;
 import org.springframework.xd.analytics.metrics.core.RichGaugeRepository;
 import org.springframework.xd.dirt.container.store.ContainerRepository;
+import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.integration.bus.local.LocalMessageBus;
 import org.springframework.xd.dirt.module.ModuleDependencyRepository;
@@ -54,6 +56,9 @@ import org.springframework.xd.dirt.plugins.job.DistributedJobService;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentHandler;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessagePublisher;
+import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.JobDeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentMessageConsumer;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.JobDeployer;
@@ -62,6 +67,7 @@ import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.stream.XDStreamParser;
+import org.springframework.xd.dirt.stream.ZooKeeperResourceDeployer;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperJobDefinitionRepository;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperJobRepository;
 import org.springframework.xd.dirt.stream.zookeeper.ZooKeeperStreamDefinitionRepository;
@@ -152,9 +158,29 @@ public class Dependencies {
 	}
 
 	@Bean
-	public JobDeployer jobDeployer() {
-		return new JobDeployer(zooKeeperConnection(), jobDefinitionRepository(), xdJobRepository(), parser(),
-				messageBus(), deploymentHandler());
+	public StreamDeploymentStrategy streamDeploymentStrategy() {
+		return new StreamDeploymentStrategy();
+	}
+
+	@Bean
+	JobDeploymentStrategy jobDeploymentStrategy() {
+		return new JobDeploymentStrategy();
+	}
+
+	@Bean
+	@Scope("prototype")
+	ResourceDeployer resourceDeployer(DeploymentStrategy strategy) {
+		return new ZooKeeperResourceDeployer(strategy);
+	}
+
+	@Bean
+	public ResourceDeployer streamDeployer() {
+		return resourceDeployer(streamDeploymentStrategy());
+	}
+
+	@Bean
+	public ResourceDeployer jobDeployer() {
+		return resourceDeployer(jobDeploymentStrategy());
 	}
 
 	@Bean
@@ -182,12 +208,6 @@ public class Dependencies {
 	@Bean
 	public ModuleDefinitionService moduleDefinitionService() {
 		return new ModuleDefinitionService(moduleRegistry(), parser(), moduleDependencyRepository());
-	}
-
-	@Bean
-	public StreamDeployer streamDeployer() {
-		return new StreamDeployer(zooKeeperConnection(), streamDefinitionRepository(), streamRepository(), parser(),
-				deploymentHandler());
 	}
 
 	@Bean
@@ -263,7 +283,8 @@ public class Dependencies {
 			@Override
 			public void publish(DeploymentMessage deploymentMessage) {
 				try {
-					consumer.consumeMessage(deploymentMessage, streamDeployer(), jobDeployer());
+					throw new UnsupportedOperationException("fix me");
+//					consumer.consumeMessage(deploymentMessage, streamDeployer(), jobDeployer());
 				}
 				catch (Exception e) {
 					throw new RuntimeException(e);
