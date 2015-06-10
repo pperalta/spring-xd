@@ -57,16 +57,6 @@ public class StreamDeploymentStrategy implements DeploymentStrategy {
 	}
 
 	@Override
-	public DeploymentUnit load(String name) {
-		try {
-			return DeploymentLoader.loadStream(zkConnection.getClient(), name, factory);
-		}
-		catch (Exception e) {
-			throw ZooKeeperUtils.wrapThrowable(e);
-		}
-	}
-
-	@Override
 	public ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider(
 			DeploymentUnit deploymentUnit, ModuleDeploymentPropertiesProvider<ModuleDeploymentProperties> provider) {
 		return new StreamRuntimePropertiesProvider((Stream) deploymentUnit, provider);

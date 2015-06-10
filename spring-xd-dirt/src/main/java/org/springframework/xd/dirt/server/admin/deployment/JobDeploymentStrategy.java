@@ -41,11 +41,6 @@ public class JobDeploymentStrategy implements DeploymentStrategy {
 	}
 
 	@Override
-	public DeploymentUnit load(String name) {
-		return null;
-	}
-
-	@Override
 	public ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider(DeploymentUnit deploymentUnit, ModuleDeploymentPropertiesProvider<ModuleDeploymentProperties> provider) {
 		return null;
 	}

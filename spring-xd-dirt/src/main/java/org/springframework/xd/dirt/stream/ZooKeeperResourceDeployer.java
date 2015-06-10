@@ -130,7 +130,6 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 		// todo: since the deployment unit has already been
 		// loaded, we probably don't need to worry about this
 //		this.validator.validateBeforeDeploy(name, properties);
-		prepareDeployment(deploymentUnit);
 
 		String deploymentPath = this.deploymentStrategy.getDeploymentPath(name);
 		CuratorFramework client = this.zkConnection.getClient();
@@ -335,9 +334,14 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 	 *
 	 * @see org.springframework.xd.dirt.core.DeploymentUnitStatus.State#deploying
 	 */
-	protected void prepareDeployment(DeploymentUnit deploymentUnit) {
-		String name = deploymentUnit.getName();
-		Map<String, String> properties = deploymentUnit.getDeploymentProperties();
+	@Deprecated
+	public void prepareDeployment(String name, Map<String, String> properties) {
+		// ***** TODO *****
+		// This method creates the deployment path (i.e. /xd/deployments/streams/<name>)
+		// and writes out the properties - this is a pre-requisite for instantiating
+		// a DeploymentUnit via the Stream/Job factories.
+		// It's a hack for now until we figure out a better way to instantiate
+		// DeploymentUnits.
 
 		Assert.hasText(name, "name cannot be blank or null");
 		logger.trace("Preparing deployment of '{}'", name);

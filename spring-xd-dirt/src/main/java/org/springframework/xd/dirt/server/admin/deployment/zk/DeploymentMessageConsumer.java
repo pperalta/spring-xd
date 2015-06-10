@@ -16,6 +16,8 @@
 
 package org.springframework.xd.dirt.server.admin.deployment.zk;
 
+import java.util.EnumSet;
+
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.queue.QueueConsumer;
 import org.apache.curator.framework.state.ConnectionState;
@@ -38,6 +40,7 @@ import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamFactory;
+import org.springframework.xd.dirt.stream.ZooKeeperResourceDeployer;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
@@ -118,9 +121,12 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 				}
 			}
 
-			// todo: seems like I'm missing something that is
-			// preventing the stream from being loaded via DeploymentLoader
+			// todo: this is a hack; see doc for prepareDeployment
+			if (EnumSet.of(DeploymentAction.deploy, DeploymentAction.createAndDeploy).contains(action)) {
+				((ZooKeeperResourceDeployer) deployer).prepareDeployment(name, message.getDeploymentProperties());
+			}
 
+			// todo: DU should not be loaded for "create"
 			DeploymentUnit deploymentUnit = type == DeploymentUnitType.Job
 					? DeploymentLoader.loadJob(zkConnection.getClient(), name, jobFactory)
 					: DeploymentLoader.loadStream(zkConnection.getClient(), name, streamFactory);
@@ -139,7 +145,11 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 					break;
 				case destroy:
 					try {
-						deployer.undeploy(deploymentUnit);
+						// todo: find an alternative to a "null" check
+						// to detect a DU that has already been undeployed...
+						if (deploymentUnit != null) {
+							deployer.undeploy(deploymentUnit);
+						}
 					}
 					catch (NotDeployedException e) {
 						// ignore
