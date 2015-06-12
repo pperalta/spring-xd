@@ -19,7 +19,6 @@ package org.springframework.xd.dirt.stream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -167,45 +166,7 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 			for (Iterator<ModuleDescriptor> descriptors = deploymentUnit.getDeploymentOrderIterator();
 				 descriptors.hasNext();) {
 				ModuleDescriptor descriptor = descriptors.next();
-				ModuleDeploymentProperties deploymentProperties =
-						deploymentPropertiesProvider.propertiesForDescriptor(descriptor);
-
-				// write out all of the required modules for this unit (including runtime properties);
-				// this does not actually perform a deployment...this data is used in case there are not
-				// enough containers to deploy the unit
-				ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider =
-						this.deploymentStrategy.runtimePropertiesProvider(deploymentUnit, deploymentPropertiesProvider);
-
-				int moduleCount = deploymentProperties.getCount();
-				if (moduleCount == 0) {
-					createModuleDeploymentRequestsPath(client, descriptor,
-							runtimePropertiesProvider.propertiesForDescriptor(descriptor));
-				}
-				else {
-					for (int i = 0; i < moduleCount; i++) {
-						createModuleDeploymentRequestsPath(client, descriptor,
-								runtimePropertiesProvider.propertiesForDescriptor(descriptor));
-					}
-				}
-
-				try {
-					// find the containers that can deploy these modules
-					Collection<Container> containers = containerMatcher.match(descriptor, deploymentProperties,
-							containerRepository.findAll());
-
-					// write out the deployment requests targeted to the containers obtained above;
-					// a new instance of the properties provider is created since this
-					// object is responsible for generating unique sequence ids for modules
-					ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> deploymentRuntimeProvider =
-							this.deploymentStrategy.runtimePropertiesProvider(deploymentUnit, deploymentPropertiesProvider);
-
-					deploymentStatuses.addAll(moduleDeploymentWriter.writeDeployment(
-							descriptor, deploymentRuntimeProvider, containers));
-				}
-				catch (NoContainerException e) {
-					logger.warn("No containers available for deployment of module '{}' for {} '{}'",
-							descriptor.getModuleLabel(), this.deploymentStrategy.getParsingContext(), name);
-				}
+				deployModule(deploymentUnit, name, client, deploymentStatuses, deploymentPropertiesProvider, descriptor);
 			}
 
 			// todo: seems that status write should happen in a finally...
@@ -223,6 +184,66 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 			throw ZooKeeperUtils.wrapThrowable(e);
 		}
 
+	}
+
+	/**
+	 * TODO:
+	 * See which of these can be moved to ZooKeeperRemoteModuleDeployer...
+	 *
+	 * @param deploymentUnit
+	 * @param name
+	 * @param client
+	 * @param deploymentStatuses
+	 * @param deploymentPropertiesProvider
+	 * @param descriptor
+	 * @throws InterruptedException
+	 */
+	private void deployModule(DeploymentUnit deploymentUnit,
+			String name,
+			CuratorFramework client,
+			Collection<ModuleDeploymentStatus> deploymentStatuses,
+			DefaultModuleDeploymentPropertiesProvider deploymentPropertiesProvider,
+			ModuleDescriptor descriptor)
+			throws InterruptedException {
+		ModuleDeploymentProperties deploymentProperties =
+				deploymentPropertiesProvider.propertiesForDescriptor(descriptor);
+
+		// write out all of the required modules for this unit (including runtime properties);
+		// this does not actually perform a deployment...this data is used in case there are not
+		// enough containers to deploy the unit
+		ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider =
+				this.deploymentStrategy.runtimePropertiesProvider(deploymentUnit, deploymentPropertiesProvider);
+
+		int moduleCount = deploymentProperties.getCount();
+		if (moduleCount == 0) {
+			createModuleDeploymentRequestsPath(client, descriptor,
+					runtimePropertiesProvider.propertiesForDescriptor(descriptor));
+		}
+		else {
+			for (int i = 0; i < moduleCount; i++) {
+				createModuleDeploymentRequestsPath(client, descriptor,
+						runtimePropertiesProvider.propertiesForDescriptor(descriptor));
+			}
+		}
+
+		try {
+			// find the containers that can deploy these modules
+			Collection<Container> containers = containerMatcher.match(descriptor, deploymentProperties,
+					containerRepository.findAll());
+
+			// write out the deployment requests targeted to the containers obtained above;
+			// a new instance of the properties provider is created since this
+			// object is responsible for generating unique sequence ids for modules
+			ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> deploymentRuntimeProvider =
+					this.deploymentStrategy.runtimePropertiesProvider(deploymentUnit, deploymentPropertiesProvider);
+
+			deploymentStatuses.addAll(moduleDeploymentWriter.writeDeployment(
+					descriptor, deploymentRuntimeProvider, containers));
+		}
+		catch (NoContainerException e) {
+			logger.warn("No containers available for deployment of module '{}' for {} '{}'",
+					descriptor.getModuleLabel(), this.deploymentStrategy.getParsingContext(), name);
+		}
 	}
 
 	@Override

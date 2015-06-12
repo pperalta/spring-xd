@@ -20,8 +20,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.xd.dirt.core.DeploymentUnit;
+import org.springframework.xd.dirt.core.Job;
+import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.server.admin.deployment.ModuleDeploymentPropertiesProvider;
-import org.springframework.xd.dirt.util.DeploymentPropertiesUtility;
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.ModuleDescriptor;
 
@@ -62,10 +63,42 @@ public class DefaultModuleDeploymentPropertiesProvider implements
 		ModuleDescriptor.Key key = moduleDescriptor.createKey();
 		ModuleDeploymentProperties properties = mapDeploymentProperties.get(key);
 		if (properties == null) {
-			properties = DeploymentPropertiesUtility.createModuleDeploymentProperties(
+			properties = createModuleDeploymentProperties(
 					deploymentUnit.getDeploymentProperties(), moduleDescriptor);
 			mapDeploymentProperties.put(key, properties);
 		}
 		return properties;
 	}
+
+	/**
+	 * Based on the deployment properties for a {@link Stream}/{@link Job}, create an instance of
+	 * {@link ModuleDeploymentProperties} for a specific module
+	 * in the {@link Stream}/{@link Job}.
+	 *
+	 * @param deploymentProperties deployment properties for a stream/job
+	 * @param descriptor descriptor for module in the stream for which to create the properties
+	 * @return deployment properties for the module
+	 */
+	protected ModuleDeploymentProperties createModuleDeploymentProperties(
+			Map<String, String> deploymentProperties, ModuleDescriptor descriptor) {
+		ModuleDeploymentProperties moduleDeploymentProperties = new ModuleDeploymentProperties();
+		// first add properties that should apply to all modules unless overridden
+		String wildcardPrefix = "module.*.";
+		for (Map.Entry<String, String> prop : deploymentProperties.entrySet()) {
+			String key = prop.getKey();
+			if (key.startsWith(wildcardPrefix)) {
+				moduleDeploymentProperties.put(key.substring(wildcardPrefix.length()), prop.getValue());
+			}
+		}
+		// now add properties that are designated for this module explicitly
+		String modulePrefix = String.format("module.%s.", descriptor.getModuleLabel());
+		for (Map.Entry<String, String> prop : deploymentProperties.entrySet()) {
+			String key = prop.getKey();
+			if (key.startsWith(modulePrefix)) {
+				moduleDeploymentProperties.put(key.substring(modulePrefix.length()), prop.getValue());
+			}
+		}
+		return moduleDeploymentProperties;
+	}
+
 }

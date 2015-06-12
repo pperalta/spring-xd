@@ -42,6 +42,6 @@ public class JobDeploymentStrategy implements DeploymentStrategy {
 
 	@Override
 	public ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider(DeploymentUnit deploymentUnit, ModuleDeploymentPropertiesProvider<ModuleDeploymentProperties> provider) {
-		return null;
+		throw new UnsupportedOperationException("todo");
 	}
 }

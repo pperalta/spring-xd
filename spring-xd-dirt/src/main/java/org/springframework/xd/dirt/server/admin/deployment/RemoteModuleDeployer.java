@@ -17,12 +17,14 @@
 package org.springframework.xd.dirt.server.admin.deployment;
 
 import org.springframework.xd.module.ModuleDescriptor;
+import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 
 /**
  * @author Patrick Peralta
  */
 public interface RemoteModuleDeployer {
-	void deploy(ModuleDescriptor descriptor);
+	void deploy(ModuleDescriptor descriptor,
+			ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider);
 
 	void undeploy(ModuleDescriptor descriptor);
 
