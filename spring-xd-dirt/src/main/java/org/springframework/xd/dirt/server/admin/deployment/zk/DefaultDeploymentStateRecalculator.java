@@ -62,22 +62,16 @@ public class DefaultDeploymentStateRecalculator implements SupervisorElectionLis
 	private ZooKeeperConnection zkConnection;
 
 	/**
-	 * Factory to construct {@link org.springframework.xd.dirt.core.Stream} instance
-	 */
-	@Autowired
-	protected StreamFactory streamFactory;
-
-	/**
-	 * Factory to construct {@link org.springframework.xd.dirt.core.Job} instance
-	 */
-	@Autowired
-	protected JobFactory jobFactory;
-
-	/**
 	 * Deployment unit state calculator
 	 */
 	@Autowired
 	protected DeploymentUnitStateCalculator stateCalculator;
+
+	/**
+	 * todo
+	 */
+	@Autowired
+	protected DeploymentLoader deploymentLoader;
 
 	/**
 	 * Iterate all deployed streams, recalculate the state of each, and create
@@ -93,7 +87,7 @@ public class DefaultDeploymentStateRecalculator implements SupervisorElectionLis
 					 new ChildPathIterator<String>(ZooKeeperUtils.stripPathConverter, streamDeployments); iterator.hasNext(); ) {
 			String streamName = iterator.next();
 			String definitionPath = Paths.build(Paths.build(Paths.STREAM_DEPLOYMENTS, streamName));
-			Stream stream = DeploymentLoader.loadStream(client, streamName, streamFactory);
+			Stream stream = deploymentLoader.loadStream(streamName);
 			if (stream != null) {
 				String streamModulesPath = Paths.build(definitionPath, Paths.MODULES);
 				List<ModuleDeploymentStatus> statusList = new ArrayList<ModuleDeploymentStatus>();
@@ -146,7 +140,7 @@ public class DefaultDeploymentStateRecalculator implements SupervisorElectionLis
 		for (Iterator<String> iterator = new ChildPathIterator<String>(ZooKeeperUtils.stripPathConverter,
 				jobDeployments); iterator.hasNext(); ) {
 			String jobName = iterator.next();
-			Job job = DeploymentLoader.loadJob(client, jobName, jobFactory);
+			Job job = deploymentLoader.loadJob(jobName);
 			if (job != null) {
 				String jobModulesPath = Paths.build(Paths.JOB_DEPLOYMENTS, jobName, Paths.MODULES);
 				List<ModuleDeploymentStatus> statusList = new ArrayList<ModuleDeploymentStatus>();

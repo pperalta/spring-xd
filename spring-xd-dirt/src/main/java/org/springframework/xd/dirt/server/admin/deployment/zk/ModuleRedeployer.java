@@ -101,44 +101,37 @@ public abstract class ModuleRedeployer {
 	protected final PathChildrenCache moduleDeploymentRequests;
 
 	/**
-	 * Stream factory.
-	 */
-	protected final StreamFactory streamFactory;
-
-	/**
-	 * Job factory.
-	 */
-	protected final JobFactory jobFactory;
-
-	/**
 	 * State calculator for stream/job state.
 	 */
 	private final DeploymentUnitStateCalculator stateCalculator;
+
+	/**
+	 * todo
+	 */
+	protected final DeploymentLoader deploymentLoader;
 
 	/**
 	 * Constructs {@code ModuleRedeployer}
 	 *
 	 * @param zkConnection ZooKeeper connection
 	 * @param containerRepository the repository to find the containers
-	 * @param streamFactory factory to construct {@link Stream}
-	 * @param jobFactory factory to construct {@link Job}
 	 * @param moduleDeploymentRequests cache of children for requested module deployments path
 	 * @param containerMatcher matches modules to containers
 	 * @param moduleDeploymentWriter utility that writes deployment requests to zk path
 	 * @param stateCalculator calculator for stream/job state
+	 * @param deploymentLoader todo
 	 */
 	public ModuleRedeployer(ZooKeeperConnection zkConnection,
-			ContainerRepository containerRepository, StreamFactory streamFactory, JobFactory jobFactory,
-			PathChildrenCache moduleDeploymentRequests, ContainerMatcher containerMatcher,
-			ModuleDeploymentWriter moduleDeploymentWriter, DeploymentUnitStateCalculator stateCalculator) {
+			ContainerRepository containerRepository, PathChildrenCache moduleDeploymentRequests,
+			ContainerMatcher containerMatcher, ModuleDeploymentWriter moduleDeploymentWriter,
+			DeploymentUnitStateCalculator stateCalculator, DeploymentLoader deploymentLoader) {
 		this.zkConnection = zkConnection;
 		this.containerRepository = containerRepository;
 		this.containerMatcher = containerMatcher;
 		this.moduleDeploymentWriter = moduleDeploymentWriter;
 		this.moduleDeploymentRequests = moduleDeploymentRequests;
-		this.streamFactory = streamFactory;
-		this.jobFactory = jobFactory;
 		this.stateCalculator = stateCalculator;
+		this.deploymentLoader = deploymentLoader;
 	}
 	/**
 	 * Deploy unallocated/orphaned modules.
@@ -303,7 +296,7 @@ public abstract class ModuleRedeployer {
 	private ModuleDeploymentStatus deployModule(ModuleDeployment moduleDeployment,
 			ContainerMatcher containerMatcher, Collection<String> exclusions) throws Exception {
 		transitionToDeploying(moduleDeployment.deploymentUnit);
-		
+
 		Iterable<Container> containers = containerRepository.findAll();
 		MatchingPredicate matchingPredicate = new MatchingPredicate(exclusions);
 		Collection<Container> matchedContainers = containerMatcher.match(moduleDeployment.moduleDescriptor,

@@ -33,6 +33,7 @@ import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleDeployer;
 import org.springframework.xd.dirt.module.ModuleRegistry;
+import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentLoader;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamFactory;
@@ -95,6 +96,17 @@ public class ContainerConfiguration {
 	}
 
 	@Bean
+	public StreamFactory streamFactory() {
+		return new StreamFactory(streamDefinitionRepository, moduleRegistry,
+				moduleOptionsMetadataResolver);
+	}
+
+	@Bean JobFactory jobFactory() {
+		return new JobFactory(jobDefinitionRepository, moduleRegistry,
+				moduleOptionsMetadataResolver);
+	}
+
+	@Bean
 	public ModuleFactory moduleFactory() {
 		return new ModuleFactory(moduleOptionsMetadataResolver);
 	}
@@ -113,15 +125,15 @@ public class ContainerConfiguration {
 	}
 
 	@Bean
+	public DeploymentLoader deploymentLoader() {
+		return new DeploymentLoader(streamFactory(), jobFactory(), zooKeeperConnection);
+	}
+
+	@Bean
 	public DeploymentListener deploymentListener() {
 		initializeZooKeeperConnection();
-		StreamFactory streamFactory = new StreamFactory(streamDefinitionRepository, moduleRegistry,
-				moduleOptionsMetadataResolver);
 
-		JobFactory jobFactory = new JobFactory(jobDefinitionRepository, moduleRegistry,
-				moduleOptionsMetadataResolver);
-		return new DeploymentListener(zooKeeperConnection, moduleDeployer, containerAttributes, jobFactory,
-				streamFactory);
+		return new DeploymentListener(zooKeeperConnection, moduleDeployer, containerAttributes, deploymentLoader());
 	}
 
 	private void initializeZooKeeperConnection() {

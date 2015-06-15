@@ -92,8 +92,9 @@ public class ZKStreamDeploymentHandler extends ZKDeploymentHandler {
 	 * @throws Exception
 	 */
 	public void deploy(String streamName) throws Exception {
-		CuratorFramework client = zkConnection.getClient();
-		deployStream(client, DeploymentLoader.loadStream(client, streamName, streamFactory));
+		throw new UnsupportedOperationException();
+//		CuratorFramework client = zkConnection.getClient();
+//		deployStream(client, DeploymentLoader.loadStream(client, streamName, streamFactory));
 	}
 
 	/**

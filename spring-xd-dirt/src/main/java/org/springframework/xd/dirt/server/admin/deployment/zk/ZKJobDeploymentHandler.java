@@ -96,8 +96,9 @@ public class ZKJobDeploymentHandler extends ZKDeploymentHandler {
 	 */
 	@Override
 	public void deploy(String jobName) throws Exception {
-		CuratorFramework client = zkConnection.getClient();
-		deployJob(client, DeploymentLoader.loadJob(client, jobName, jobFactory));
+		throw new UnsupportedOperationException();
+//		CuratorFramework client = zkConnection.getClient();
+//		deployJob(client, DeploymentLoader.loadJob(client, jobName, jobFactory));
 	}
 
 	/**

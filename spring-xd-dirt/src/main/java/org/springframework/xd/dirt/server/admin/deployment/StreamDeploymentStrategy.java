@@ -32,15 +32,6 @@ import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
  * @author Patrick Peralta
  */
 public class StreamDeploymentStrategy implements DeploymentStrategy {
-	@Autowired
-	private ZooKeeperConnection zkConnection;
-
-	/**
-	 * Factory to construct {@link org.springframework.xd.dirt.core.Stream} instance
-	 */
-	@Autowired
-	private StreamFactory factory;
-
 	@Override
 	public String getDeploymentPath(String name) {
 		return Paths.build(Paths.STREAM_DEPLOYMENTS, name);

@@ -64,20 +64,19 @@ public class DepartingContainerModuleRedeployer extends ModuleRedeployer {
 	 *
 	 * @param zkConnection ZooKeeper connection
 	 * @param containerRepository the repository to find the containers
-	 * @param streamFactory factory to construct {@link Stream}
-	 * @param jobFactory factory to construct {@link Job}
 	 * @param moduleDeploymentRequests cache of children for requested module deployments path
 	 * @param containerMatcher matches modules to containers
 	 * @param moduleDeploymentWriter utility that writes deployment requests to zk path
 	 * @param stateCalculator calculator for stream/job state
+	 * @param deploymentLoader todo
 	 */
 	public DepartingContainerModuleRedeployer(ZooKeeperConnection zkConnection,
 			ContainerRepository containerRepository,
-			StreamFactory streamFactory, JobFactory jobFactory,
 			PathChildrenCache moduleDeploymentRequests, ContainerMatcher containerMatcher,
-			ModuleDeploymentWriter moduleDeploymentWriter, DeploymentUnitStateCalculator stateCalculator) {
-		super(zkConnection, containerRepository, streamFactory, jobFactory, moduleDeploymentRequests, containerMatcher,
-				moduleDeploymentWriter, stateCalculator);
+			ModuleDeploymentWriter moduleDeploymentWriter, DeploymentUnitStateCalculator stateCalculator,
+			DeploymentLoader deploymentLoader) {
+		super(zkConnection, containerRepository, moduleDeploymentRequests, containerMatcher,
+				moduleDeploymentWriter, stateCalculator, deploymentLoader);
 	}
 
 	/**
@@ -120,7 +119,7 @@ public class DepartingContainerModuleRedeployer extends ModuleRedeployer {
 			String moduleType = moduleDeploymentsPath.getModuleType();
 
 			if (ModuleType.job.toString().equals(moduleType)) {
-				Job job = DeploymentLoader.loadJob(client, unitName, jobFactory);
+				Job job = deploymentLoader.loadJob(unitName);
 				if (job != null) {
 					redeployModule(new ModuleDeployment(job, job.getJobModuleDescriptor(),
 							deploymentProperties), false);
@@ -129,7 +128,7 @@ public class DepartingContainerModuleRedeployer extends ModuleRedeployer {
 			else {
 				Stream stream = streamMap.get(unitName);
 				if (stream == null) {
-					stream = DeploymentLoader.loadStream(client, unitName, streamFactory);
+					stream = deploymentLoader.loadStream(unitName);
 					streamMap.put(unitName, stream);
 				}
 				if (stream != null) {

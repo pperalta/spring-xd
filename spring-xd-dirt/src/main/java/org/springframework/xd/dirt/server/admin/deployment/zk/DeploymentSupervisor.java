@@ -98,16 +98,10 @@ public class DeploymentSupervisor implements ApplicationListener<ApplicationEven
 	private DeploymentMessageConsumer deploymentMessageConsumer;
 
 	/**
-	 * Factory to construct {@link org.springframework.xd.dirt.core.Stream} instance
+	 * todo
 	 */
 	@Autowired
-	private StreamFactory streamFactory;
-
-	/**
-	 * Factory to construct {@link org.springframework.xd.dirt.core.Job} instance
-	 */
-	@Autowired
-	private JobFactory jobFactory;
+	private DeploymentLoader deploymentLoader;
 
 	/**
 	 * Matcher that applies container matching criteria
@@ -475,8 +469,7 @@ public class DeploymentSupervisor implements ApplicationListener<ApplicationEven
 
 				containerListener = new ContainerListener(zkConnection,
 						containerRepository,
-						streamFactory,
-						jobFactory,
+						deploymentLoader,
 						streamDeployments,
 						jobDeployments,
 						moduleDeploymentRequests,

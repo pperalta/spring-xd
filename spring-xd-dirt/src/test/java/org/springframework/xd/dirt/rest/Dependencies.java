@@ -47,6 +47,7 @@ import org.springframework.xd.dirt.container.store.ContainerRepository;
 import org.springframework.xd.dirt.core.ResourceDeployer;
 import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.integration.bus.local.LocalMessageBus;
+import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleDependencyRepository;
 import org.springframework.xd.dirt.module.WritableModuleRegistry;
 import org.springframework.xd.dirt.module.store.ModuleMetadataRepository;
@@ -59,12 +60,12 @@ import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessagePubl
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.JobDeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
+import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentLoader;
 import org.springframework.xd.dirt.server.admin.deployment.zk.DeploymentMessageConsumer;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
-import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.module.support.ModuleDefinitionService;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
-import org.springframework.xd.dirt.stream.StreamDeployer;
+import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.stream.XDStreamParser;
 import org.springframework.xd.dirt.stream.ZooKeeperResourceDeployer;
@@ -300,6 +301,21 @@ public class Dependencies {
 				publish(message);
 			}
 		};
+	}
+
+	@Bean
+	public StreamFactory streamFactory() {
+		return new StreamFactory(streamDefinitionRepository(), moduleRegistry(), moduleOptionsMetadataResolver());
+	}
+
+	@Bean
+	public JobFactory jobFactory() {
+		return new JobFactory(jobDefinitionRepository(), moduleRegistry(), moduleOptionsMetadataResolver());
+	}
+
+	@Bean
+	public DeploymentLoader deploymentLoader() {
+		return new DeploymentLoader(streamFactory(), jobFactory(), zooKeeperConnection());
 	}
 
 	@Bean

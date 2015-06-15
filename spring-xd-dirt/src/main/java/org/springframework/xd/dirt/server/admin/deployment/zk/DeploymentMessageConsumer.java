@@ -79,10 +79,8 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 	private JobDefinitionRepository jobRepository;
 
 	@Autowired
-	private StreamFactory streamFactory;
+	private DeploymentLoader deploymentLoader;
 
-	@Autowired
-	private JobFactory jobFactory;
 
 //	// todo: for testing only; this will be removed eventually
 //	public void consumeMessage(DeploymentMessage message, StreamDeployer streamDeployer, JobDeployer jobDeployer) throws Exception {
@@ -121,16 +119,23 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 				}
 			}
 
-			// todo: this is a hack; see doc for prepareDeployment
-			if (EnumSet.of(DeploymentAction.deploy, DeploymentAction.createAndDeploy).contains(action)) {
-				((ZooKeeperResourceDeployer) deployer).prepareDeployment(name, message.getDeploymentProperties());
+			if (action == DeploymentAction.create) {
+				return;
 			}
 
-			// todo: DU should not be loaded for "create"
-			DeploymentUnit deploymentUnit = type == DeploymentUnitType.Job
-					? DeploymentLoader.loadJob(zkConnection.getClient(), name, jobFactory)
-					: DeploymentLoader.loadStream(zkConnection.getClient(), name, streamFactory);
-			logger.warn("deployment unit: {}", deploymentUnit);
+			DeploymentUnit deploymentUnit;
+			if (EnumSet.of(DeploymentAction.deploy, DeploymentAction.createAndDeploy).contains(action)) {
+				deploymentUnit = type == DeploymentUnitType.Job
+						? deploymentLoader.newJobInstance(name, message.getDeploymentProperties())
+						: deploymentLoader.newStreamInstance(name, message.getDeploymentProperties());
+			}
+			else {
+				deploymentUnit = type == DeploymentUnitType.Job
+						? deploymentLoader.loadJob(name)
+						: deploymentLoader.loadStream(name);
+			}
+
+logger.warn("deployment unit: {}", deploymentUnit);
 
 			switch (action) {
 				case createAndDeploy:

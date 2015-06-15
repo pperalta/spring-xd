@@ -73,23 +73,22 @@ public class ContainerMatchingModuleRedeployer extends ModuleRedeployer {
 	 *
 	 * @param zkConnection ZooKeeper connection
 	 * @param containerRepository the repository to find the containers
-	 * @param streamFactory factory to construct {@link Stream}
-	 * @param jobFactory factory to construct {@link Job}
 	 * @param streamDeployments cache of children for stream deployments path
 	 * @param jobDeployments cache of children for job deployments path
 	 * @param moduleDeploymentRequests cache of children for requested module deployments path
 	 * @param containerMatcher matches modules to containers
 	 * @param moduleDeploymentWriter utility that writes deployment requests to zk path
 	 * @param stateCalculator calculator for stream/job state
+	 * @param deploymentLoader todo
 	 */
 	public ContainerMatchingModuleRedeployer(ZooKeeperConnection zkConnection,
 			ContainerRepository containerRepository,
-			StreamFactory streamFactory, JobFactory jobFactory,
 			PathChildrenCache streamDeployments, PathChildrenCache jobDeployments,
 			PathChildrenCache moduleDeploymentRequests, ContainerMatcher containerMatcher,
-			ModuleDeploymentWriter moduleDeploymentWriter, DeploymentUnitStateCalculator stateCalculator) {
-		super(zkConnection, containerRepository, streamFactory, jobFactory, moduleDeploymentRequests, containerMatcher,
-				moduleDeploymentWriter, stateCalculator);
+			ModuleDeploymentWriter moduleDeploymentWriter, DeploymentUnitStateCalculator stateCalculator,
+			DeploymentLoader deploymentLoader) {
+		super(zkConnection, containerRepository, moduleDeploymentRequests, containerMatcher,
+				moduleDeploymentWriter, stateCalculator, deploymentLoader);
 		this.streamDeployments = streamDeployments;
 		this.jobDeployments = jobDeployments;
 	}
@@ -123,7 +122,7 @@ public class ContainerMatchingModuleRedeployer extends ModuleRedeployer {
 		// iterate the cache of stream deployments
 		for (ChildData data : streamDeployments.getCurrentData()) {
 			String streamName = ZooKeeperUtils.stripPathConverter.convert(data);
-			final Stream stream = DeploymentLoader.loadStream(client, streamName, streamFactory);
+			final Stream stream = deploymentLoader.loadStream(streamName);
 			// if stream is null this means the stream was destroyed or undeployed
 			if (stream != null) {
 				List<ModuleDeploymentRequestsPath> requestedModules =
@@ -167,7 +166,7 @@ public class ContainerMatchingModuleRedeployer extends ModuleRedeployer {
 			String jobName = ZooKeeperUtils.stripPathConverter.convert(data);
 
 			// if job is null this means the job was destroyed or undeployed
-			Job job = DeploymentLoader.loadJob(client, jobName, jobFactory);
+			Job job = deploymentLoader.loadJob(jobName);
 			if (job != null) {
 				List<ModuleDeploymentRequestsPath> requestedModules = ModuleDeploymentRequestsPath.getModulesForDeploymentUnit(
 						requestedModulesPaths, jobName);

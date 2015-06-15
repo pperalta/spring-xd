@@ -91,8 +91,7 @@ public class ContainerListener implements PathChildrenCacheListener {
 	 * Construct a ContainerListener.
 	 *
 	 * @param zkConnection ZooKeeper connection
-	 * @param streamFactory factory to construct {@link org.springframework.xd.dirt.stream.Stream}
-	 * @param jobFactory factory to construct {@link org.springframework.xd.dirt.stream.Job}
+	 * @param deploymentLoader TODO
 	 * @param streamDeployments cache of children for stream deployments path
 	 * @param jobDeployments cache of children for job deployments path
 	 * @param moduleDeploymentRequests cache of children for requested module deployments path
@@ -103,17 +102,17 @@ public class ContainerListener implements PathChildrenCacheListener {
 	 */
 	public ContainerListener(ZooKeeperConnection zkConnection,
 			ContainerRepository containerRepository,
-			StreamFactory streamFactory, JobFactory jobFactory,
+			DeploymentLoader deploymentLoader,
 			PathChildrenCache streamDeployments, PathChildrenCache jobDeployments,
 			PathChildrenCache moduleDeploymentRequests, ContainerMatcher containerMatcher,
 			ModuleDeploymentWriter moduleDeploymentWriter, DeploymentUnitStateCalculator stateCalculator,
 			ScheduledExecutorService executorService, AtomicLong quietPeriod) {
 		this.containerMatchingModuleRedeployer = new ContainerMatchingModuleRedeployer(zkConnection,
-				containerRepository, streamFactory, jobFactory, streamDeployments, jobDeployments,
-				moduleDeploymentRequests, containerMatcher, moduleDeploymentWriter, stateCalculator);
+				containerRepository, streamDeployments, jobDeployments,
+				moduleDeploymentRequests, containerMatcher, moduleDeploymentWriter, stateCalculator, deploymentLoader);
 		this.departingContainerModuleRedeployer = new DepartingContainerModuleRedeployer(zkConnection,
-				containerRepository, streamFactory, jobFactory, moduleDeploymentRequests, containerMatcher,
-				moduleDeploymentWriter, stateCalculator);
+				containerRepository, moduleDeploymentRequests, containerMatcher,
+				moduleDeploymentWriter, stateCalculator, deploymentLoader);
 		this.quietPeriod = quietPeriod;
 		this.executorService = executorService;
 	}

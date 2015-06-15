@@ -26,7 +26,6 @@ import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoDataAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Scope;
 import org.springframework.xd.dirt.cluster.AdminAttributes;
 import org.springframework.xd.dirt.container.store.AdminRepository;
 import org.springframework.xd.dirt.container.store.ZooKeeperAdminRepository;
@@ -35,7 +34,6 @@ import org.springframework.xd.dirt.integration.bus.MessageBus;
 import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.module.ModuleRegistry;
 import org.springframework.xd.dirt.server.admin.deployment.DefaultDeploymentUnitStateCalculator;
-import org.springframework.xd.dirt.server.admin.deployment.DeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitStateCalculator;
 import org.springframework.xd.dirt.server.admin.deployment.JobDeploymentStrategy;
 import org.springframework.xd.dirt.server.admin.deployment.StreamDeploymentStrategy;
@@ -43,12 +41,10 @@ import org.springframework.xd.dirt.stream.AlreadyDeployedException;
 import org.springframework.xd.dirt.stream.DefinitionAlreadyExistsException;
 import org.springframework.xd.dirt.stream.DeploymentValidator;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
-import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.JobRepository;
 import org.springframework.xd.dirt.stream.NoSuchDefinitionException;
 import org.springframework.xd.dirt.stream.NotDeployedException;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
-import org.springframework.xd.dirt.stream.StreamDeployer;
 import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.stream.StreamRepository;
 import org.springframework.xd.dirt.stream.XDStreamParser;
@@ -104,6 +100,11 @@ public class DeploymentConfiguration {
 	@Bean
 	public JobFactory jobFactory() {
 		return new JobFactory(jobDefinitionRepository, moduleRegistry, moduleOptionsMetadataResolver);
+	}
+
+	@Bean
+	public DeploymentLoader deploymentLoader() {
+		return new DeploymentLoader(streamFactory(), jobFactory(), zkConnection);
 	}
 
 	@Bean

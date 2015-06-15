@@ -57,12 +57,14 @@ import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 import org.springframework.xd.module.core.Module;
 
 /**
+ * Listener for deployment requests for a container instance under
+ * {@link org.springframework.xd.dirt.zookeeper.Paths#DEPLOYMENTS}.
+ *
  * @author Mark Fisher
  * @author David Turanski
- * @author Ilayaperumal Gopinathan Listener for deployment requests for a container instance under {@link
- *         org.springframework.xd.dirt.zookeeper.Paths#DEPLOYMENTS}.
+ * @author Ilayaperumal Gopinathan
  */
-class DeploymentListener implements PathChildrenCacheListener {
+public class DeploymentListener implements PathChildrenCacheListener {
 
 	private static final Logger logger = LoggerFactory.getLogger(DeploymentListener.class);
 
@@ -92,16 +94,6 @@ class DeploymentListener implements PathChildrenCacheListener {
 	private final ContainerAttributes containerAttributes;
 
 	/**
-	 * Job factory.
-	 */
-	private final JobFactory jobFactory;
-
-	/**
-	 * Stream factory.
-	 */
-	private final StreamFactory streamFactory;
-
-	/**
 	 * Prefix for tap channels.
 	 */
 	private static final String TAP_CHANNEL_PREFIX = "tap:";
@@ -112,6 +104,8 @@ class DeploymentListener implements PathChildrenCacheListener {
 	private final Map<ModuleDescriptor.Key, ModuleDescriptor> mapDeployedModules =
 			new ConcurrentHashMap<ModuleDescriptor.Key, ModuleDescriptor>();
 
+	private final DeploymentLoader deploymentLoader;
+
 	/**
 	 * Create an instance that will register the provided {@link ContainerAttributes} whenever the underlying {@link
 	 * ZooKeeperConnection} is established. If that connection is already established at the time this instance receives
@@ -119,21 +113,19 @@ class DeploymentListener implements PathChildrenCacheListener {
 	 * Otherwise, registration occurs within a callback that is invoked for connected events as well as reconnected
 	 * events.
 	 *
+	 * todo fix params
 	 * @param containerAttributes runtime and configured attributes for the container
-	 * @param streamFactory factory to construct {@link Stream}
-	 * @param jobFactory factory to construct {@link Job}
 	 * @param moduleDeployer module deployer
 	 * @param zkConnection ZooKeeper connection
 	 */
 	public DeploymentListener(ZooKeeperConnection zkConnection, ModuleDeployer moduleDeployer,
-			ContainerAttributes containerAttributes, JobFactory jobFactory, StreamFactory streamFactory) {
+			ContainerAttributes containerAttributes, DeploymentLoader deploymentLoader) {
 		this.zkConnection = zkConnection;
 		this.jobModuleWatcher = new JobModuleWatcher();
 		this.streamModuleWatcher = new StreamModuleWatcher();
 		this.moduleDeployer = moduleDeployer;
 		this.containerAttributes = containerAttributes;
-		this.jobFactory = jobFactory;
-		this.streamFactory = streamFactory;
+		this.deploymentLoader = deploymentLoader;
 	}
 
 	/**
@@ -285,7 +277,7 @@ class DeploymentListener implements PathChildrenCacheListener {
 				.setModuleSequence(properties.getSequenceAsString()).setContainer(containerAttributes.getId()).build();
 
 		Module module = null;
-		Job job = DeploymentLoader.loadJob(client, jobName, jobFactory);
+		Job job = deploymentLoader.loadJob(jobName);
 		if (job != null) {
 			ModuleDescriptor moduleDescriptor = job.getJobModuleDescriptor();
 			module = deployModule(moduleDescriptor, properties);
@@ -328,7 +320,7 @@ class DeploymentListener implements PathChildrenCacheListener {
 				.setContainer(this.containerAttributes.getId()).build();
 
 		Module module = null;
-		Stream stream = DeploymentLoader.loadStream(client, streamName, streamFactory);
+		Stream stream = deploymentLoader.loadStream(streamName);
 		if (stream != null) {
 			ModuleDescriptor descriptor = stream.getModuleDescriptor(moduleLabel);
 			module = deployModule(descriptor, properties);
