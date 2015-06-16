@@ -399,7 +399,7 @@ public final class ZooKeeperResourceDeployer implements ResourceDeployer, Superv
 	}
 
 	@Override
-	public DeploymentUnitStatus getDeploymentStatus(String id) {
+	public DeploymentUnitStatus getStatus(String id) {
 		String path = Paths.build(this.deploymentStrategy.getDeploymentPath(id), Paths.STATUS);
 		byte[] statusBytes = null;
 

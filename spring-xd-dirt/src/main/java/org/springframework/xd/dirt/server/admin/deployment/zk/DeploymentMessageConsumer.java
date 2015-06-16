@@ -28,19 +28,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.xd.dirt.core.DeploymentUnit;
 import org.springframework.xd.dirt.core.ResourceDeployer;
-import org.springframework.xd.dirt.job.JobFactory;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentAction;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentMessage;
 import org.springframework.xd.dirt.server.admin.deployment.DeploymentUnitType;
 import org.springframework.xd.dirt.stream.JobDefinition;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
-import org.springframework.xd.dirt.stream.JobDeployer;
 import org.springframework.xd.dirt.stream.NotDeployedException;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
-import org.springframework.xd.dirt.stream.StreamDeployer;
-import org.springframework.xd.dirt.stream.StreamFactory;
-import org.springframework.xd.dirt.stream.ZooKeeperResourceDeployer;
 import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperConnection;
 import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
@@ -56,12 +51,6 @@ import org.springframework.xd.store.DomainRepository;
 public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessage> {
 
 	private static final Logger logger = LoggerFactory.getLogger(DeploymentMessageConsumer.class);
-
-//	@Autowired
-//	private StreamDeployer streamDeployer;
-//
-//	@Autowired
-//	private JobDeployer jobDeployer;
 
 	@Autowired
 	private ResourceDeployer streamDeployer;
@@ -126,16 +115,14 @@ public class DeploymentMessageConsumer implements QueueConsumer<DeploymentMessag
 			DeploymentUnit deploymentUnit;
 			if (EnumSet.of(DeploymentAction.deploy, DeploymentAction.createAndDeploy).contains(action)) {
 				deploymentUnit = type == DeploymentUnitType.Job
-						? deploymentLoader.newJobInstance(name, message.getDeploymentProperties())
-						: deploymentLoader.newStreamInstance(name, message.getDeploymentProperties());
+						? deploymentLoader.createJob(name, message.getDeploymentProperties())
+						: deploymentLoader.createStream(name, message.getDeploymentProperties());
 			}
 			else {
 				deploymentUnit = type == DeploymentUnitType.Job
 						? deploymentLoader.loadJob(name)
 						: deploymentLoader.loadStream(name);
 			}
-
-logger.warn("deployment unit: {}", deploymentUnit);
 
 			switch (action) {
 				case createAndDeploy:

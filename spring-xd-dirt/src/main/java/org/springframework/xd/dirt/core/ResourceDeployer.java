@@ -13,12 +13,6 @@
 
 package org.springframework.xd.dirt.core;
 
-import java.util.Map;
-
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.xd.dirt.stream.StreamDefinition;
-
 /**
  * Interface for XD Resource Services.
  *
@@ -54,5 +48,5 @@ public interface ResourceDeployer {
 	 * @param name id for deployment unit
 	 * @return deployment status
 	 */
-	DeploymentUnitStatus getDeploymentStatus(String name);
+	DeploymentUnitStatus getStatus(String name);
 }

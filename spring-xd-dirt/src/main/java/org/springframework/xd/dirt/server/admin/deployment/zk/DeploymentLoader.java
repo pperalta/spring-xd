@@ -38,12 +38,16 @@ import org.springframework.xd.dirt.zookeeper.ZooKeeperUtils;
 import org.springframework.xd.rest.domain.support.DeploymentPropertiesFormat;
 
 /**
- * Utility for loading streams and jobs for the purpose of deployment.
+ * Utility for creating and loading instances of streams and jobs for the purpose
+ * of deployment.
  * <p/>
- *
- * @see org.springframework.xd.dirt.server.admin.deployment.zk.ContainerListener
- * @see org.springframework.xd.dirt.server.admin.deployment.zk.ZKStreamDeploymentHandler
- * @see org.springframework.xd.dirt.server.admin.deployment.zk.ZKJobDeploymentHandler
+ * New stream and job instances are created via {@link #createStream} and
+ * {@link #createJob}. Creating a new instance results in:
+ * <ul>
+ *     <li>writing deployment properties to ZooKeeper</li>
+ *     <li>transitioning the deployment unit state to "deploying"</li>
+ * </ul>
+ * Existing instances can be loaded via {@link #loadStream} and {@link #loadJob}.
  *
  * @author Patrick Peralta
  * @author Ilayaperumal Gopinathan
@@ -59,6 +63,13 @@ public class DeploymentLoader {
 	private final ZooKeeperConnection zkConnection;
 
 
+	/**
+	 * Construct a new {@link DeploymentLoader}.
+	 *
+	 * @param streamFactory  factory for creating {@link Stream} instances
+	 * @param jobFactory     factory for creating {@link Job} instances
+	 * @param zkConnection   ZooKeeper connection
+	 */
 	public DeploymentLoader(StreamFactory streamFactory, JobFactory jobFactory, ZooKeeperConnection zkConnection) {
 		this.streamFactory = streamFactory;
 		this.jobFactory = jobFactory;
@@ -66,36 +77,48 @@ public class DeploymentLoader {
 	}
 
 	/**
-	 * todo
+	 * Create and return a new instance of {@link Stream}. This assumes
+	 * that the stream with the given name has already been stored in
+	 * the {@link org.springframework.xd.dirt.stream.StreamDefinitionRepository}.
+	 * The state of the stream will be "deploying".
 	 *
-	 * @param name
-	 * @param properties
-	 * @return
+	 * @param name        name of stream to be deployed
+	 * @param properties  deployment properties for stream
+	 * @return Stream instance ready to be deployed
 	 */
-	public Stream newStreamInstance(String name, Map<String, String> properties) {
-		writeDeploymentProperties(DeploymentUnitType.Stream, name, properties);
+	public Stream createStream(String name, Map<String, String> properties) {
+		prepareDeployment(DeploymentUnitType.Stream, name, properties);
 		return loadStream(name);
 	}
 
 	/**
-	 * todo
+	 * Create and return a new instance of {@link Job}. This assumes
+	 * that the job with the given name has already been stored in
+	 * the {@link org.springframework.xd.dirt.stream.JobDefinitionRepository}.
+	 * The state of the job will be "deploying".
 	 *
-	 * @param name
-	 * @param properties
-	 * @return
+	 * @param name        name of job to be deployed
+	 * @param properties  deployment properties for job
+	 * @return Job instance ready to be deployed
 	 */
-	public Job newJobInstance(String name, Map<String, String> properties) {
-		writeDeploymentProperties(DeploymentUnitType.Job, name, properties);
+	public Job createJob(String name, Map<String, String> properties) {
+		prepareDeployment(DeploymentUnitType.Job, name, properties);
 		return loadJob(name);
 	}
 
 	/**
-	 * todo
-	 * @param type
-	 * @param name
-	 * @param properties
+	 * Prepares a deployment unit for deployment by:
+	 * <ul>
+	 *     <li>writing deployment properties to ZooKeeper</li>
+	 *     <li>transitioning the deployment unit state to "deploying"</li>
+	 * </ul>
+	 * Once "prepared", the unit may be loaded by {@link #loadStream} or {@link #loadJob}.
+	 *
+	 * @param type        deployment unit type
+	 * @param name        deployment unit name
+	 * @param properties  deployment properties
 	 */
-	protected void writeDeploymentProperties(DeploymentUnitType type, String name, Map<String, String> properties) {
+	protected void prepareDeployment(DeploymentUnitType type, String name, Map<String, String> properties) {
 		Assert.hasText(name, "name cannot be blank or null");
 		logger.trace("Preparing deployment of '{}'", name);
 

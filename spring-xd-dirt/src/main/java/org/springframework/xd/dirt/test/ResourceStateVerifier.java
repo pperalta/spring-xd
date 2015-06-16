@@ -132,13 +132,13 @@ public class ResourceStateVerifier {
 	 * Wait for the State to change to one or more expected target states.
 	 */
 	State waitForDeployState(String resourceName, State... targetStates) {
-		DeploymentUnitStatus.State currentState = resourceDeployer.getDeploymentStatus(resourceName).getState();
+		DeploymentUnitStatus.State currentState = resourceDeployer.getStatus(resourceName).getState();
 		long waitTime = 0;
 		List<State> targetStateList = Arrays.asList(targetStates);
 		while (!targetStateList.contains(currentState) && waitTime < STATE_CHANGE_TIMEOUT) {
 			try {
 				Thread.sleep(STATE_CHANGE_WAIT_TIME);
-				currentState = resourceDeployer.getDeploymentStatus(resourceName).getState();
+				currentState = resourceDeployer.getStatus(resourceName).getState();
 				waitTime += STATE_CHANGE_WAIT_TIME;
 			}
 			catch (InterruptedException e) {
