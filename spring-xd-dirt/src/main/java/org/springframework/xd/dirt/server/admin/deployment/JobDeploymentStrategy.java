@@ -18,6 +18,7 @@ package org.springframework.xd.dirt.server.admin.deployment;
 
 import org.springframework.xd.dirt.core.DeploymentUnit;
 import org.springframework.xd.dirt.stream.ParsingContext;
+import org.springframework.xd.dirt.zookeeper.Paths;
 import org.springframework.xd.module.ModuleDeploymentProperties;
 import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 
@@ -27,21 +28,23 @@ import org.springframework.xd.module.RuntimeModuleDeploymentProperties;
 public class JobDeploymentStrategy implements DeploymentStrategy {
 	@Override
 	public String getDeploymentPath(String name) {
-		return null;
+		return Paths.build(Paths.JOB_DEPLOYMENTS, name);
 	}
 
 	@Override
 	public String getDeploymentsPath() {
-		return null;
+		return Paths.JOB_DEPLOYMENTS;
 	}
 
 	@Override
 	public ParsingContext getParsingContext() {
-		return null;
+		return ParsingContext.job;
 	}
 
 	@Override
-	public ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider(DeploymentUnit deploymentUnit, ModuleDeploymentPropertiesProvider<ModuleDeploymentProperties> provider) {
-		throw new UnsupportedOperationException("todo");
+	public ModuleDeploymentPropertiesProvider<RuntimeModuleDeploymentProperties> runtimePropertiesProvider(
+			DeploymentUnit deploymentUnit,
+			ModuleDeploymentPropertiesProvider<ModuleDeploymentProperties> provider) {
+		return new RuntimeModuleDeploymentPropertiesProvider(provider);
 	}
 }

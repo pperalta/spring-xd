@@ -50,7 +50,7 @@ import org.springframework.xd.dirt.job.NoSuchJobExecutionException;
 import org.springframework.xd.dirt.plugins.job.DistributedJobLocator;
 import org.springframework.xd.dirt.plugins.job.ExpandedJobParametersConverter;
 import org.springframework.xd.dirt.stream.JobDefinition;
-import org.springframework.xd.dirt.stream.JobDeployer;
+import org.springframework.xd.dirt.stream.JobLauncher;
 import org.springframework.xd.rest.domain.JobExecutionInfoResource;
 
 /**
@@ -66,8 +66,8 @@ import org.springframework.xd.rest.domain.JobExecutionInfoResource;
 @ExposesResourceFor(JobExecutionInfoResource.class)
 public class BatchJobExecutionsController extends AbstractBatchJobsController {
 
-//	@Autowired
-//	private JobDeployer jobDeployer;
+	@Autowired
+	private JobLauncher jobLauncher;
 
 	@Autowired
 	private DistributedJobLocator jobLocator;
@@ -140,9 +140,7 @@ public class BatchJobExecutionsController extends AbstractBatchJobsController {
 	@RequestMapping(value = "", method = RequestMethod.POST, params = "jobname")
 	@ResponseStatus(HttpStatus.CREATED)
 	public void launchJob(@RequestParam("jobname") String name, @RequestParam(required = false) String jobParameters) {
-//		jobDeployer.launch(name, jobParameters);
-		// todo: fix
-		throw new UnsupportedOperationException();
+		jobLauncher.launch(name, jobParameters);
 	}
 
 
@@ -312,8 +310,8 @@ public class BatchJobExecutionsController extends AbstractBatchJobsController {
 
 		final String jobParametersAsString = expandedJobParametersConverter
 				.getJobParametersAsString(jobParameters, true);
-		// todo
-//		jobDeployer.launch(lastInstance.getJobName(), jobParametersAsString);
+
+		jobLauncher.launch(lastInstance.getJobName(), jobParametersAsString);
 	}
 
 	/**

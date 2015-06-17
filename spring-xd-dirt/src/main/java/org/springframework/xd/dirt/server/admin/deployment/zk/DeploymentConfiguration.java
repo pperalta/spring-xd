@@ -41,6 +41,7 @@ import org.springframework.xd.dirt.stream.AlreadyDeployedException;
 import org.springframework.xd.dirt.stream.DefinitionAlreadyExistsException;
 import org.springframework.xd.dirt.stream.DeploymentValidator;
 import org.springframework.xd.dirt.stream.JobDefinitionRepository;
+import org.springframework.xd.dirt.stream.JobLauncher;
 import org.springframework.xd.dirt.stream.JobRepository;
 import org.springframework.xd.dirt.stream.NoSuchDefinitionException;
 import org.springframework.xd.dirt.stream.NotDeployedException;
@@ -196,6 +197,11 @@ public class DeploymentConfiguration {
 	@Bean
 	public AdminRepository adminRepository() {
 		return new ZooKeeperAdminRepository(zkConnection);
+	}
+
+	@Bean
+	public JobLauncher xdJobLauncher() {
+		return new JobLauncher(messageBus, jobDefinitionRepository, jobRepository);
 	}
 
 }
