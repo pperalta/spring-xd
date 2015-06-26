@@ -50,7 +50,7 @@ import org.springframework.xd.rest.domain.StreamDefinitionResource;
  * @since 1.0
  */
 @Controller
-@RequestMapping("/streams")
+@RequestMapping("/streams-old")
 @ExposesResourceFor(StreamDefinitionResource.class)
 public class StreamsController extends
 		XDController<StreamDefinition, StreamDefinitionResourceAssembler, StreamDefinitionResource, Stream> {

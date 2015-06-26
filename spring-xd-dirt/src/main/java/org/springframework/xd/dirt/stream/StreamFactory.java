@@ -38,7 +38,7 @@ public class StreamFactory {
 	/**
 	 * DSL parser.
 	 */
-	private final XDStreamParser parser;
+	private final XDParser parser;
 
 	/**
 	 * Construct a StreamFactory to create {@link Stream} domain model instances.
@@ -52,6 +52,15 @@ public class StreamFactory {
 			ModuleOptionsMetadataResolver moduleOptionsMetadataResolver) {
 		this.parser = new XDStreamParser(streamDefinitionRepository, moduleRegistry,
 				moduleOptionsMetadataResolver);
+	}
+
+	/**
+	 * Construct a StreamFactory to create {@link Stream} domain model instances.
+	 *
+	 * @param parser parser for stream definitions
+	 */
+	public StreamFactory(XDParser parser) {
+		this.parser = parser;
 	}
 
 	/**

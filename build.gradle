@@ -114,6 +114,7 @@ allprojects {
 	group = 'org.springframework.xd'
 
 	repositories {
+		mavenLocal()
 		mavenCentral()
 		maven { url 'http://repo.spring.io/milestone' }
 		maven { url 'http://repo.spring.io/libs-milestone' }
@@ -527,6 +528,7 @@ project('spring-xd-dirt') {
 			exclude group: 'org.springframework', module: 'spring-core'
 		}
 		compile "org.apache.tomcat.embed:tomcat-embed-core"
+		compile("io.pivotal.receptor:receptor-client:0.0.1-SNAPSHOT")
 
 		// ************* Dirt-Container only (per se)
 		compile project(":spring-xd-module")
@@ -1054,7 +1056,7 @@ project('spring-xd-test') {
 	dependencies {
 		compile ("org.springframework.integration:spring-integration-test"){
 			exclude group: 'org.apache.avro', module: 'avro-compiler'
-			
+
 		}
 		compile "org.springframework.integration:spring-integration-amqp"
 		compile "org.springframework.integration:spring-integration-redis"
