@@ -27,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.pivotal.receptor.client.ReceptorClient;
 import io.pivotal.receptor.commands.DesiredLRPCreateRequest;
 import io.pivotal.receptor.support.EnvironmentVariable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -60,6 +62,8 @@ import org.springframework.xd.rest.domain.StreamDefinitionResource;
 @RequestMapping("/streams")
 @ExposesResourceFor(StreamDefinitionResource.class)
 public class NewController {
+
+	private static final Logger logger = LoggerFactory.getLogger(NewController.class);
 
 	private final ResourceAssembler<StreamDefinition, StreamDefinitionResource> streamAssembler
 			= new StreamDefinitionResourceAssembler();
@@ -116,7 +120,7 @@ public class NewController {
 	}
 
 	class ReceptorModuleDeployer implements ModuleDeployer {
-		public static final String DOCKER_PATH = "docker://192.168.59.103:5000/xd-module";
+		public static final String DOCKER_PATH = "docker://192.168.59.103:5000/module-launcher";
 
 		public static final String BASE_ADDRESS = "192.168.11.11.xip.io";
 
@@ -133,23 +137,26 @@ public class NewController {
 			request.runAction().setPath("java");
 			request.runAction().addArg("-Djava.security.egd=file:/dev/./urandom");
 			request.runAction().addArg("-jar");
-			request.runAction().addArg("/xd-module.jar");
+			request.runAction().addArg("/module-launcher.jar");
+
 			List<EnvironmentVariable> environmentVariables = new ArrayList<EnvironmentVariable>();
-			for (EnvironmentVariable var : request.getEnv()) {
-				environmentVariables.add(var);
-			}
-			environmentVariables.add(new EnvironmentVariable("XD_MODULE", path(descriptor)));
-			Map<String, String> parameters = descriptor.getParameters();
-			if (parameters != null && parameters.size() > 0) {
-				for (Map.Entry<String, String> option : parameters.entrySet()) {
-					environmentVariables.add(new EnvironmentVariable("OPTION_" + option.getKey(), option.getValue()));
-				}
-			}
+			Collections.addAll(environmentVariables, request.getEnv());
+			environmentVariables.add(new EnvironmentVariable("MODULES", descriptor.getModuleName()));
+			environmentVariables.add(new EnvironmentVariable("SPRING_PROFILES_ACTIVE", "cloud"));
+
 			request.setEnv(environmentVariables.toArray(new EnvironmentVariable[environmentVariables.size()]));
+
 			request.setPorts(new int[] {8080, 9000});
 			request.addRoute(8080, new String[] {guid + "." + BASE_ADDRESS, guid + "-8080." + BASE_ADDRESS});
 			request.addRoute(9000, new String[] {guid + "-9000." + BASE_ADDRESS});
+
+			logger.info("Desired LRP: {}", request);
+			for (EnvironmentVariable e : environmentVariables) {
+				logger.info("{}={}", e.getName(), e.getValue());
+			}
+
 			receptorClient.createDesiredLRP(request);
+
 		}
 
 		@Override
