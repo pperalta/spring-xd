@@ -34,6 +34,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PagedResourcesAssembler;
+import org.springframework.hateoas.ExposesResourceFor;
 import org.springframework.hateoas.PagedResources;
 import org.springframework.hateoas.ResourceAssembler;
 import org.springframework.http.HttpStatus;
@@ -57,6 +58,7 @@ import org.springframework.xd.rest.domain.StreamDefinitionResource;
  */
 @Controller
 @RequestMapping("/streams")
+@ExposesResourceFor(StreamDefinitionResource.class)
 public class NewController {
 
 	private final ResourceAssembler<StreamDefinition, StreamDefinitionResource> streamAssembler

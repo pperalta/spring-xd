@@ -22,14 +22,15 @@ import org.springframework.xd.rest.domain.StreamDefinitionResource;
 
 /**
  * Knows how to build a REST resource out of our domain model {@link StreamDefinition}.
- * 
+ *
  * @author Eric Bottard
  */
 public class StreamDefinitionResourceAssembler extends
 		ResourceAssemblerSupport<StreamDefinition, StreamDefinitionResource> {
 
 	public StreamDefinitionResourceAssembler() {
-		super(StreamsController.class, StreamDefinitionResource.class);
+//		super(StreamsController.class, StreamDefinitionResource.class);
+		super(NewController.class, StreamDefinitionResource.class);
 	}
 
 	@Override
