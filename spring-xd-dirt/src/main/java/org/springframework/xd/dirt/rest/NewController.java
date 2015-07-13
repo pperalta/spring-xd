@@ -18,6 +18,7 @@ package org.springframework.xd.dirt.rest;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.ExposesResourceFor;
 import org.springframework.hateoas.PagedResources;
 import org.springframework.hateoas.ResourceAssembler;
+import org.springframework.hateoas.ResourceSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,6 +49,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.Stream;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
@@ -54,6 +57,7 @@ import org.springframework.xd.dirt.stream.StreamFactory;
 import org.springframework.xd.dirt.stream.XDParser;
 import org.springframework.xd.module.ModuleDescriptor;
 import org.springframework.xd.rest.domain.StreamDefinitionResource;
+import org.springframework.xd.rest.domain.support.DeploymentPropertiesFormat;
 
 /**
  * @author Patrick Peralta
@@ -66,9 +70,11 @@ public class NewController {
 	private static final Logger logger = LoggerFactory.getLogger(NewController.class);
 
 	private final ResourceAssembler<StreamDefinition, StreamDefinitionResource> streamAssembler
-			= new StreamDefinitionResourceAssembler();
+			= new Assembler();
 
 	private final StreamDefinitionRepository repository = new InMemoryStreamDefinitionRepository();
+
+	private final Map<String, DeploymentUnitStatus> streamStatus = new ConcurrentHashMap<>();
 
 	private final ModuleDeployer moduleDeployer = new ReceptorModuleDeployer();
 
@@ -97,26 +103,93 @@ public class NewController {
 		if (deploy) {
 			Stream stream = streamFactory.createStream(name, Collections.singletonMap("definition", definition));
 			for (Iterator<ModuleDescriptor> iterator = stream.getDeploymentOrderIterator(); iterator.hasNext();) {
+				// todo: does not consider module count - is the deployer responsible for this?
 				moduleDeployer.deploy(iterator.next());
 			}
+
+			// todo: since deploy is async we need to iterate the modules again
+			// and determine if deployment succeeded in order to calculate the stream state;
+			// for now YOLO
+			streamStatus.put(name, new DeploymentUnitStatus(DeploymentUnitStatus.State.deployed));
 		}
+	}
+
+	@RequestMapping(value = "/definitions", method = RequestMethod.DELETE)
+	@ResponseStatus(HttpStatus.OK)
+	public void deleteAll() throws Exception {
+		throw new UnsupportedOperationException();
+	}
+
+
+	@RequestMapping(value = "/definitions/{name}", method = RequestMethod.GET)
+	@ResponseStatus(HttpStatus.OK)
+	@ResponseBody
+	public ResourceSupport display(@PathVariable("name") String name) throws Exception {
+		throw new UnsupportedOperationException();
 	}
 
 	@RequestMapping(value = "/definitions/{name}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
 	public void delete(@PathVariable("name") String name) throws Exception {
+		if (streamStatus.containsKey(name)) {
+			undeploy(name);
+		}
+		repository.delete(name);
+	}
+
+	@RequestMapping(value = "/deployments/{name}", method = RequestMethod.POST)
+	@ResponseStatus(HttpStatus.CREATED)
+	public void deploy(@PathVariable("name") String name, @RequestParam(required = false) String properties)
+			throws Exception {
+		Map<String, String> deploymentProperties =
+				new HashMap<>(DeploymentPropertiesFormat.parseDeploymentProperties(properties));
+		StreamDefinition definition = repository.findOne(name);
+		// todo: is this step really required?
+		deploymentProperties.put("definition", definition.getDefinition());
+
+		Stream stream = streamFactory.createStream(name, deploymentProperties);
+		for (Iterator<ModuleDescriptor> iterator = stream.getDeploymentOrderIterator(); iterator.hasNext();) {
+			// todo: does not consider module count - is the deployer responsible for this?
+			moduleDeployer.deploy(iterator.next());
+		}
+
+		// todo: since deploy is async we need to iterate the modules again
+		// and determine if deployment succeeded in order to calculate the stream state;
+		// for now YOLO
+		streamStatus.put(name, new DeploymentUnitStatus(DeploymentUnitStatus.State.deployed));
+	}
+
+	@RequestMapping(value = "/deployments/{name}", method = RequestMethod.DELETE)
+	@ResponseStatus(HttpStatus.OK)
+	public void undeploy(@PathVariable("name") String name) throws Exception {
+		// todo: assuming this is deployed
 		StreamDefinition streamDefinition = repository.findOne(name);
 		Stream stream = streamFactory.createStream(name, Collections.singletonMap("definition", streamDefinition.getDefinition()));
 		for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptorsAsDeque()) {
 			moduleDeployer.undeploy(moduleDescriptor);
 		}
-		repository.delete(name);
+		streamStatus.remove(name);
+	}
+
+	class Assembler extends StreamDefinitionResourceAssembler {
+		@Override
+		protected StreamDefinitionResource instantiateResource(StreamDefinition entity) {
+			StreamDefinitionResource resource = super.instantiateResource(entity);
+			DeploymentUnitStatus status = streamStatus.get(resource.getName());
+			resource.setStatus(status == null
+					? DeploymentUnitStatus.State.undeployed.toString()
+					: status.getState().toString());
+
+			return resource;
+		}
 	}
 
 	interface ModuleDeployer {
 		void deploy(ModuleDescriptor descriptor);
 
 		void undeploy(ModuleDescriptor descriptor);
+
+		// todo: next steps -> use xolpoc for module status!!
 	}
 
 	class ReceptorModuleDeployer implements ModuleDeployer {
