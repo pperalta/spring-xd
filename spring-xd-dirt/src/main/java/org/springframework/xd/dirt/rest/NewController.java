@@ -19,13 +19,17 @@ package org.springframework.xd.dirt.rest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 
 import io.pivotal.receptor.client.ReceptorClient;
+import io.pivotal.receptor.commands.ActualLRPResponse;
 import io.pivotal.receptor.commands.DesiredLRPCreateRequest;
 import io.pivotal.receptor.support.EnvironmentVariable;
 import org.slf4j.Logger;
@@ -43,6 +47,7 @@ import org.springframework.hateoas.ResourceAssembler;
 import org.springframework.hateoas.ResourceSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -74,7 +79,7 @@ public class NewController {
 
 	private final StreamDefinitionRepository repository = new InMemoryStreamDefinitionRepository();
 
-	private final Map<String, DeploymentUnitStatus> streamStatus = new ConcurrentHashMap<>();
+	private final Set<String> deployedStreams = new CopyOnWriteArraySet<>();
 
 	private final ModuleDeployer moduleDeployer = new ReceptorModuleDeployer();
 
@@ -107,10 +112,7 @@ public class NewController {
 				moduleDeployer.deploy(iterator.next());
 			}
 
-			// todo: since deploy is async we need to iterate the modules again
-			// and determine if deployment succeeded in order to calculate the stream state;
-			// for now YOLO
-			streamStatus.put(name, new DeploymentUnitStatus(DeploymentUnitStatus.State.deployed));
+			deployedStreams.add(name);
 		}
 	}
 
@@ -119,7 +121,6 @@ public class NewController {
 	public void deleteAll() throws Exception {
 		throw new UnsupportedOperationException();
 	}
-
 
 	@RequestMapping(value = "/definitions/{name}", method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
@@ -131,7 +132,7 @@ public class NewController {
 	@RequestMapping(value = "/definitions/{name}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
 	public void delete(@PathVariable("name") String name) throws Exception {
-		if (streamStatus.containsKey(name)) {
+		if (deployedStreams.contains(name)) {
 			undeploy(name);
 		}
 		repository.delete(name);
@@ -153,10 +154,7 @@ public class NewController {
 			moduleDeployer.deploy(iterator.next());
 		}
 
-		// todo: since deploy is async we need to iterate the modules again
-		// and determine if deployment succeeded in order to calculate the stream state;
-		// for now YOLO
-		streamStatus.put(name, new DeploymentUnitStatus(DeploymentUnitStatus.State.deployed));
+		deployedStreams.add(name);
 	}
 
 	@RequestMapping(value = "/deployments/{name}", method = RequestMethod.DELETE)
@@ -168,17 +166,47 @@ public class NewController {
 		for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptorsAsDeque()) {
 			moduleDeployer.undeploy(moduleDescriptor);
 		}
-		streamStatus.remove(name);
+		deployedStreams.remove(name);
+	}
+
+	private String calculateStreamState(String name) {
+		List<ModuleStatus> moduleStates = new ArrayList<ModuleStatus>();
+		StreamDefinition streamDefinition = repository.findOne(name);
+		Stream stream = streamFactory.createStream(name, Collections.singletonMap("definition", streamDefinition.getDefinition()));
+		for (ModuleDescriptor descriptor : stream.getModuleDescriptorsAsDeque()) {
+			moduleStates.add(moduleDeployer.getStatus(descriptor));
+		}
+
+		Set<ModuleState> states = new HashSet<>();
+		for (ModuleStatus status : moduleStates) {
+			states.add(status.getState());
+		}
+
+		// todo: this requires more thought...
+		if (states.contains(ModuleState.failed)) {
+			return ModuleState.failed.toString();
+		}
+		else if (states.contains(ModuleState.incomplete)) {
+			return ModuleState.incomplete.toString();
+		}
+		else if (states.contains(ModuleState.deploying)) {
+			return ModuleState.deploying.toString();
+		}
+		else if (states.contains(ModuleState.deployed)) {
+			return ModuleState.deployed.toString();
+		}
+		else {
+			return "unknown";
+		}
 	}
 
 	class Assembler extends StreamDefinitionResourceAssembler {
 		@Override
 		protected StreamDefinitionResource instantiateResource(StreamDefinition entity) {
 			StreamDefinitionResource resource = super.instantiateResource(entity);
-			DeploymentUnitStatus status = streamStatus.get(resource.getName());
-			resource.setStatus(status == null
-					? DeploymentUnitStatus.State.undeployed.toString()
-					: status.getState().toString());
+			resource.setStatus(deployedStreams.contains(resource.getName())
+					? calculateStreamState(resource.getName())
+					: DeploymentUnitStatus.State.undeployed.toString());
 
 			return resource;
 		}
@@ -189,8 +217,102 @@ public class NewController {
 
 		void undeploy(ModuleDescriptor descriptor);
 
-		// todo: next steps -> use xolpoc for module status!!
+		ModuleStatus getStatus(ModuleDescriptor descriptor);
 	}
+
+	static class ModuleInstanceStatus {
+
+		private final String id;
+
+		private final String state;
+
+		private final Map<String, String> attributes = new HashMap<String, String>();
+
+		public ModuleInstanceStatus(String id, String state, Map<String, String> attributes) {
+			this.id = id;
+			this.state = (state != null ? state : "unknown");
+			this.attributes.putAll(attributes);
+		}
+
+		public String getId() {
+			return id;
+		}
+
+		public String getState() {
+			return state;
+		}
+
+		public Map<String, String> getAttributes() {
+			return Collections.unmodifiableMap(attributes);
+		}
+
+	}
+
+	enum ModuleState { deploying, deployed, incomplete, failed }
+
+	static class ModuleStatus {
+
+		private final ModuleDescriptor descriptor;
+
+		private final Map<String, ModuleInstanceStatus> instances = new HashMap<String, ModuleInstanceStatus>();
+
+		private ModuleStatus(ModuleDescriptor descriptor) {
+			this.descriptor = descriptor;
+		}
+
+		public String getName() {
+			return descriptor.getModuleLabel();
+		}
+
+		public ModuleState getState() {
+			Set<String> instanceStates = new HashSet<String>();
+			for (Map.Entry<String, ModuleInstanceStatus> entry : instances.entrySet()) {
+				instanceStates.add(entry.getValue().getState());
+			}
+			ModuleState state = ModuleState.failed;
+			if (instanceStates.size() == 1 && "RUNNING".equals(instanceStates.iterator().next())) {
+				state = ModuleState.deployed;
+			}
+			if (instanceStates.contains("UNCLAIMED")) {
+				state = (instanceStates.size() == 1 ? ModuleState.failed : ModuleState.incomplete);
+			}
+			if (instanceStates.contains("CLAIMED")) {
+				state = ModuleState.deploying;
+			}
+			return state;
+		}
+
+		public Map<String, ModuleInstanceStatus> getInstances() {
+			return instances;
+		}
+
+		private void addInstance(String id, ModuleInstanceStatus status) {
+			this.instances.put(id, status);
+		}
+
+		public static ModuleStatusBuilder of(ModuleDescriptor descriptor) {
+			return new ModuleStatusBuilder(descriptor);
+		}
+	}
+
+	static class ModuleStatusBuilder {
+
+		private final ModuleStatus status;
+
+		private ModuleStatusBuilder(ModuleDescriptor descriptor) {
+			this.status = new ModuleStatus(descriptor);
+		}
+
+		public ModuleStatusBuilder with(ModuleInstanceStatus instance) {
+			status.addInstance(instance.getId(), instance);
+			return this;
+		}
+
+		public ModuleStatus build() {
+			return status;
+		}
+	}
+
 
 	class ReceptorModuleDeployer implements ModuleDeployer {
 		public static final String DOCKER_PATH = "docker://192.168.59.103:5000/module-launcher";
@@ -235,6 +357,23 @@ public class NewController {
 		@Override
 		public void undeploy(ModuleDescriptor descriptor) {
 			receptorClient.deleteDesiredLRP(guid(descriptor));
+		}
+
+		@Override
+		public ModuleStatus getStatus(ModuleDescriptor descriptor) {
+			ModuleStatusBuilder builder = ModuleStatus.of(descriptor);
+			for (ActualLRPResponse lrp : receptorClient.getActualLRPsByProcessGuid(guid(descriptor))) {
+				Map<String, String> attributes = new HashMap<String, String>();
+				attributes.put("address", lrp.getAddress());
+				attributes.put("cellId", lrp.getCellId());
+				attributes.put("domain", lrp.getDomain());
+				attributes.put("processGuid", lrp.getProcessGuid());
+				attributes.put("index", Integer.toString(lrp.getIndex()));
+				attributes.put("ports", StringUtils.arrayToCommaDelimitedString(lrp.getPorts()));
+				attributes.put("since", Long.toString(lrp.getSince()));
+				builder.with(new ModuleInstanceStatus(lrp.getInstanceGuid(), lrp.getState(), attributes));
+			}
+			return builder.build();
 		}
 
 		private String guid(ModuleDescriptor descriptor) {
