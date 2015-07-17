@@ -160,13 +160,14 @@ public class NewController {
 	@RequestMapping(value = "/deployments/{name}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
 	public void undeploy(@PathVariable("name") String name) throws Exception {
-		// todo: assuming this is deployed
-		StreamDefinition streamDefinition = repository.findOne(name);
-		Stream stream = streamFactory.createStream(name, Collections.singletonMap("definition", streamDefinition.getDefinition()));
-		for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptorsAsDeque()) {
-			moduleDeployer.undeploy(moduleDescriptor);
+		if (deployedStreams.contains(name)) {
+			StreamDefinition streamDefinition = repository.findOne(name);
+			Stream stream = streamFactory.createStream(name, Collections.singletonMap("definition", streamDefinition.getDefinition()));
+			for (ModuleDescriptor moduleDescriptor : stream.getModuleDescriptorsAsDeque()) {
+				moduleDeployer.undeploy(moduleDescriptor);
+			}
+			deployedStreams.remove(name);
 		}
-		deployedStreams.remove(name);
 	}
 
 	private String calculateStreamState(String name) {
