@@ -221,17 +221,46 @@ public class NewController {
 		ModuleStatus getStatus(ModuleDescriptor descriptor);
 	}
 
-	static class ModuleInstanceStatus {
+	interface ModuleInstanceStatus {
+		String getId();
+		ModuleState getState();
+		Map<String, String> getAttributes();
+	}
+
+	static class ReceptorModuleInstanceStatus implements ModuleInstanceStatus {
 
 		private final String id;
 
-		private final String state;
+		private final ModuleState state;
 
 		private final Map<String, String> attributes = new HashMap<String, String>();
 
-		public ModuleInstanceStatus(String id, String state, Map<String, String> attributes) {
+		public ReceptorModuleInstanceStatus(String id, String lrpState, Map<String, String> attributes) {
+			logger.trace("LRP {}, state {}, attributes: {}", id, lrpState, attributes);
+
 			this.id = id;
-			this.state = (state != null ? state : "unknown");
+			switch (lrpState) {
+				case "RUNNING":
+					this.state = ModuleState.deployed;
+					break;
+				case "UNCLAIMED":
+					if (attributes.containsKey("placement_error")) {
+						this.state = ModuleState.failed;
+					}
+					else {
+						this.state = ModuleState.deploying;
+					}
+					break;
+				case "CLAIMED":
+					this.state = ModuleState.deploying;
+					break;
+				case "CRASHED":
+					this.state = ModuleState.failed;
+					break;
+				default:
+					this.state = ModuleState.unknown;
+			}
+
 			this.attributes.putAll(attributes);
 		}
 
@@ -239,7 +268,7 @@ public class NewController {
 			return id;
 		}
 
-		public String getState() {
+		public ModuleState getState() {
 			return state;
 		}
 
@@ -249,12 +278,13 @@ public class NewController {
 
 	}
 
-	enum ModuleState { deploying, deployed, incomplete, failed }
+	enum ModuleState { deploying, deployed, incomplete, unknown, failed }
 
 	static class ModuleStatus {
 
 		private final ModuleDescriptor descriptor;
 
+		// todo: can we get a stronger ID for instance than just a string?, perhaps ModuleDescriptor.Key?
 		private final Map<String, ModuleInstanceStatus> instances = new HashMap<String, ModuleInstanceStatus>();
 
 		private ModuleStatus(ModuleDescriptor descriptor) {
@@ -266,19 +296,19 @@ public class NewController {
 		}
 
 		public ModuleState getState() {
-			Set<String> instanceStates = new HashSet<String>();
+			Set<ModuleState> instanceStates = new HashSet<ModuleState>();
 			for (Map.Entry<String, ModuleInstanceStatus> entry : instances.entrySet()) {
 				instanceStates.add(entry.getValue().getState());
 			}
-			ModuleState state = ModuleState.failed;
-			if (instanceStates.size() == 1 && "RUNNING".equals(instanceStates.iterator().next())) {
+			ModuleState state = ModuleState.unknown;
+			if (instanceStates.size() == 1 && instanceStates.contains(ModuleState.deployed)) {
 				state = ModuleState.deployed;
 			}
-			if (instanceStates.contains("UNCLAIMED")) {
-				state = (instanceStates.size() == 1 ? ModuleState.failed : ModuleState.incomplete);
-			}
-			if (instanceStates.contains("CLAIMED")) {
+			if (instanceStates.contains(ModuleState.deploying)) {
 				state = ModuleState.deploying;
+			}
+			if (instanceStates.contains(ModuleState.failed)) {
+				state = (instanceStates.size() == 1 ? ModuleState.failed : ModuleState.incomplete);
 			}
 			return state;
 		}
@@ -372,7 +402,7 @@ public class NewController {
 				attributes.put("index", Integer.toString(lrp.getIndex()));
 				attributes.put("ports", StringUtils.arrayToCommaDelimitedString(lrp.getPorts()));
 				attributes.put("since", Long.toString(lrp.getSince()));
-				builder.with(new ModuleInstanceStatus(lrp.getInstanceGuid(), lrp.getState(), attributes));
+				builder.with(new ReceptorModuleInstanceStatus(lrp.getInstanceGuid(), lrp.getState(), attributes));
 			}
 			return builder.build();
 		}
