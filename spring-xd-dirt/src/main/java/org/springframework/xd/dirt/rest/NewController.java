@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 the original author or authors.
+ * Copyright 2015 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,10 +28,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 
-import io.pivotal.receptor.client.ReceptorClient;
-import io.pivotal.receptor.commands.ActualLRPResponse;
-import io.pivotal.receptor.commands.DesiredLRPCreateRequest;
-import io.pivotal.receptor.support.EnvironmentVariable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +43,6 @@ import org.springframework.hateoas.ResourceAssembler;
 import org.springframework.hateoas.ResourceSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -56,6 +51,9 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.xd.dirt.core.DeploymentUnitStatus;
 import org.springframework.xd.dirt.core.Stream;
+import org.springframework.xd.dirt.spi.ModuleDeployer;
+import org.springframework.xd.dirt.spi.ModuleStatus;
+import org.springframework.xd.dirt.spi.receptor.ReceptorModuleDeployer;
 import org.springframework.xd.dirt.stream.StreamDefinition;
 import org.springframework.xd.dirt.stream.StreamDefinitionRepository;
 import org.springframework.xd.dirt.stream.StreamFactory;
@@ -178,23 +176,23 @@ public class NewController {
 			moduleStates.add(moduleDeployer.getStatus(descriptor));
 		}
 
-		Set<ModuleState> states = new HashSet<>();
+		Set<ModuleStatus.State> states = new HashSet<>();
 		for (ModuleStatus status : moduleStates) {
 			states.add(status.getState());
 		}
 
 		// todo: this requires more thought...
-		if (states.contains(ModuleState.failed)) {
-			return ModuleState.failed.toString();
+		if (states.contains(ModuleStatus.State.failed)) {
+			return ModuleStatus.State.failed.toString();
 		}
-		else if (states.contains(ModuleState.incomplete)) {
-			return ModuleState.incomplete.toString();
+		else if (states.contains(ModuleStatus.State.incomplete)) {
+			return ModuleStatus.State.incomplete.toString();
 		}
-		else if (states.contains(ModuleState.deploying)) {
-			return ModuleState.deploying.toString();
+		else if (states.contains(ModuleStatus.State.deploying)) {
+			return ModuleStatus.State.deploying.toString();
 		}
-		else if (states.contains(ModuleState.deployed)) {
-			return ModuleState.deployed.toString();
+		else if (states.contains(ModuleStatus.State.deployed)) {
+			return ModuleStatus.State.deployed.toString();
 		}
 		else {
 			return "unknown";
@@ -211,210 +209,6 @@ public class NewController {
 
 			return resource;
 		}
-	}
-
-	interface ModuleDeployer {
-		void deploy(ModuleDescriptor descriptor);
-
-		void undeploy(ModuleDescriptor descriptor);
-
-		ModuleStatus getStatus(ModuleDescriptor descriptor);
-	}
-
-	interface ModuleInstanceStatus {
-		String getId();
-		ModuleState getState();
-		Map<String, String> getAttributes();
-	}
-
-	static class ReceptorModuleInstanceStatus implements ModuleInstanceStatus {
-
-		private final String id;
-
-		private final ModuleState state;
-
-		private final Map<String, String> attributes = new HashMap<String, String>();
-
-		public ReceptorModuleInstanceStatus(String id, String lrpState, Map<String, String> attributes) {
-			logger.trace("LRP {}, state {}, attributes: {}", id, lrpState, attributes);
-
-			this.id = id;
-			switch (lrpState) {
-				case "RUNNING":
-					this.state = ModuleState.deployed;
-					break;
-				case "UNCLAIMED":
-					if (attributes.containsKey("placement_error")) {
-						this.state = ModuleState.failed;
-					}
-					else {
-						this.state = ModuleState.deploying;
-					}
-					break;
-				case "CLAIMED":
-					this.state = ModuleState.deploying;
-					break;
-				case "CRASHED":
-					this.state = ModuleState.failed;
-					break;
-				default:
-					this.state = ModuleState.unknown;
-			}
-
-			this.attributes.putAll(attributes);
-		}
-
-		public String getId() {
-			return id;
-		}
-
-		public ModuleState getState() {
-			return state;
-		}
-
-		public Map<String, String> getAttributes() {
-			return Collections.unmodifiableMap(attributes);
-		}
-
-	}
-
-	enum ModuleState { deploying, deployed, incomplete, unknown, failed }
-
-	static class ModuleStatus {
-
-		private final ModuleDescriptor descriptor;
-
-		// todo: can we get a stronger ID for instance than just a string?, perhaps ModuleDescriptor.Key?
-		private final Map<String, ModuleInstanceStatus> instances = new HashMap<String, ModuleInstanceStatus>();
-
-		private ModuleStatus(ModuleDescriptor descriptor) {
-			this.descriptor = descriptor;
-		}
-
-		public String getName() {
-			return descriptor.getModuleLabel();
-		}
-
-		public ModuleState getState() {
-			Set<ModuleState> instanceStates = new HashSet<ModuleState>();
-			for (Map.Entry<String, ModuleInstanceStatus> entry : instances.entrySet()) {
-				instanceStates.add(entry.getValue().getState());
-			}
-			ModuleState state = ModuleState.unknown;
-			if (instanceStates.size() == 1 && instanceStates.contains(ModuleState.deployed)) {
-				state = ModuleState.deployed;
-			}
-			if (instanceStates.contains(ModuleState.deploying)) {
-				state = ModuleState.deploying;
-			}
-			if (instanceStates.contains(ModuleState.failed)) {
-				state = (instanceStates.size() == 1 ? ModuleState.failed : ModuleState.incomplete);
-			}
-			return state;
-		}
-
-		public Map<String, ModuleInstanceStatus> getInstances() {
-			return instances;
-		}
-
-		private void addInstance(String id, ModuleInstanceStatus status) {
-			this.instances.put(id, status);
-		}
-
-		public static ModuleStatusBuilder of(ModuleDescriptor descriptor) {
-			return new ModuleStatusBuilder(descriptor);
-		}
-	}
-
-	static class ModuleStatusBuilder {
-
-		private final ModuleStatus status;
-
-		private ModuleStatusBuilder(ModuleDescriptor descriptor) {
-			this.status = new ModuleStatus(descriptor);
-		}
-
-		public ModuleStatusBuilder with(ModuleInstanceStatus instance) {
-			status.addInstance(instance.getId(), instance);
-			return this;
-		}
-
-		public ModuleStatus build() {
-			return status;
-		}
-	}
-
-
-	class ReceptorModuleDeployer implements ModuleDeployer {
-		public static final String DOCKER_PATH = "docker://192.168.59.103:5000/module-launcher";
-
-		public static final String BASE_ADDRESS = "192.168.11.11.xip.io";
-
-		public static final String ADMIN_GUID = "xd-admin";
-
-		private final ReceptorClient receptorClient = new ReceptorClient();
-
-		@Override
-		public void deploy(ModuleDescriptor descriptor) {
-			String guid = guid(descriptor);
-			DesiredLRPCreateRequest request = new DesiredLRPCreateRequest();
-			request.setProcessGuid(guid);
-			request.setRootfs(DOCKER_PATH);
-			request.runAction().setPath("java");
-			request.runAction().addArg("-Djava.security.egd=file:/dev/./urandom");
-			request.runAction().addArg("-jar");
-			request.runAction().addArg("/module-launcher.jar");
-
-			List<EnvironmentVariable> environmentVariables = new ArrayList<EnvironmentVariable>();
-			Collections.addAll(environmentVariables, request.getEnv());
-			environmentVariables.add(new EnvironmentVariable("MODULES", descriptor.getModuleName()));
-			environmentVariables.add(new EnvironmentVariable("SPRING_PROFILES_ACTIVE", "cloud"));
-
-			request.setEnv(environmentVariables.toArray(new EnvironmentVariable[environmentVariables.size()]));
-
-			request.setPorts(new int[] {8080, 9000});
-			request.addRoute(8080, new String[] {guid + "." + BASE_ADDRESS, guid + "-8080." + BASE_ADDRESS});
-			request.addRoute(9000, new String[] {guid + "-9000." + BASE_ADDRESS});
-
-			logger.info("Desired LRP: {}", request);
-			for (EnvironmentVariable e : environmentVariables) {
-				logger.info("{}={}", e.getName(), e.getValue());
-			}
-
-			receptorClient.createDesiredLRP(request);
-
-		}
-
-		@Override
-		public void undeploy(ModuleDescriptor descriptor) {
-			receptorClient.deleteDesiredLRP(guid(descriptor));
-		}
-
-		@Override
-		public ModuleStatus getStatus(ModuleDescriptor descriptor) {
-			ModuleStatusBuilder builder = ModuleStatus.of(descriptor);
-			for (ActualLRPResponse lrp : receptorClient.getActualLRPsByProcessGuid(guid(descriptor))) {
-				Map<String, String> attributes = new HashMap<String, String>();
-				attributes.put("address", lrp.getAddress());
-				attributes.put("cellId", lrp.getCellId());
-				attributes.put("domain", lrp.getDomain());
-				attributes.put("processGuid", lrp.getProcessGuid());
-				attributes.put("index", Integer.toString(lrp.getIndex()));
-				attributes.put("ports", StringUtils.arrayToCommaDelimitedString(lrp.getPorts()));
-				attributes.put("since", Long.toString(lrp.getSince()));
-				builder.with(new ReceptorModuleInstanceStatus(lrp.getInstanceGuid(), lrp.getState(), attributes));
-			}
-			return builder.build();
-		}
-
-		private String guid(ModuleDescriptor descriptor) {
-			return "xd-" + descriptor.getGroup() + "-" + descriptor.getModuleName() + "-" + descriptor.getIndex();
-		}
-
-		private String path(ModuleDescriptor descriptor) {
-			return descriptor.getGroup() + "." + descriptor.getType() + "." + descriptor.getModuleName() + "." + descriptor.getIndex();
-		}
-
 	}
 
 
